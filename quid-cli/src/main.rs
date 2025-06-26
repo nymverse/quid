@@ -90,6 +90,7 @@ struct EncryptedBackup {
     algorithm: String,        // "SHA3-STREAM"
     kdf: String,             // "PBKDF2-SHA3"
     salt: String,            // Hex encoded
+    nonce: String,           // Hex encoded - STORE DIRECTLY
     iterations: u32,         // PBKDF2 iterations
     encrypted_data: String,  // Hex encoded
     created: u64,
@@ -125,6 +126,7 @@ fn generate_keystream(key: &[u8], nonce: &[u8], length: usize) -> Vec<u8> {
 }
 
 /// Professional encryption using SHA3-based stream cipher
+
 fn encrypt_identity_professional(identity: &CliIdentity, password: &str) -> anyhow::Result<EncryptedBackup> {
     // Generate salt using system time + counter
     let mut salt_data = std::time::SystemTime::now()
@@ -151,14 +153,18 @@ fn encrypt_identity_professional(identity: &CliIdentity, password: &str) -> anyh
     let identity_json = serde_json::to_string(identity)?;
     let plaintext = identity_json.as_bytes();
     
-    // Generate nonce from timestamp
-    let mut nonce_hasher = Sha3_256::new();
-    Digest::update(&mut nonce_hasher, &salt);
-    Digest::update(&mut nonce_hasher, password.as_bytes());
-    Digest::update(&mut nonce_hasher, &std::time::SystemTime::now()
+    // Generate RANDOM nonce (don't derive it)
+    let mut nonce_data = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)?
-        .as_micros()
-        .to_le_bytes());
+        .as_nanos()
+        .to_le_bytes()
+        .to_vec();
+    nonce_data.extend(&std::process::id().to_le_bytes());
+    nonce_data.extend(password.as_bytes());
+    
+    let mut nonce_hasher = Sha3_256::new();
+    Digest::update(&mut nonce_hasher, &nonce_data);
+    Digest::update(&mut nonce_hasher, b"QuID-NONCE");
     let nonce = nonce_hasher.finalize();
     
     // Generate keystream and encrypt
@@ -185,6 +191,7 @@ fn encrypt_identity_professional(identity: &CliIdentity, password: &str) -> anyh
         algorithm: "SHA3-STREAM".to_string(),
         kdf: "PBKDF2-SHA3".to_string(),
         salt: hex::encode(&salt),
+        nonce: hex::encode(&nonce), // Store the nonce directly!
         iterations,
         encrypted_data: hex::encode(&authenticated_data),
         created: std::time::SystemTime::now()
@@ -200,8 +207,9 @@ fn decrypt_identity_professional(backup: &EncryptedBackup, password: &str) -> an
         return Err(anyhow::anyhow!("Unsupported encryption algorithm: {}", backup.algorithm));
     }
     
-    // Decode salt and data
+    // Decode salt, nonce, and data
     let salt = hex::decode(&backup.salt)?;
+    let nonce = hex::decode(&backup.nonce)?; // Use stored nonce directly!
     let authenticated_data = hex::decode(&backup.encrypted_data)?;
     
     // Split ciphertext and auth tag
@@ -225,14 +233,7 @@ fn decrypt_identity_professional(backup: &EncryptedBackup, password: &str) -> an
         return Err(anyhow::anyhow!("Authentication failed (wrong password or corrupted data)"));
     }
     
-    // Generate nonce (same process as encryption)
-    let mut nonce_hasher = Sha3_256::new();
-    Digest::update(&mut nonce_hasher, &salt);
-    Digest::update(&mut nonce_hasher, password.as_bytes());
-    Digest::update(&mut nonce_hasher, &backup.created.to_le_bytes()); // Use backup timestamp
-    let nonce = nonce_hasher.finalize();
-    
-    // Generate keystream and decrypt
+    // Generate keystream and decrypt using stored nonce
     let keystream = generate_keystream(&key, &nonce[..16], ciphertext.len());
     let mut plaintext = vec![0u8; ciphertext.len()];
     

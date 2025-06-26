@@ -22,3 +22,5 @@ secrets/
 test-identity.json
 my-identity.json
 identity*.json
+alice*
+*.quid
