@@ -16,5 +16,6 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 hex = { workspace = true }
 secrecy = { workspace = true }
-
-
+qrcode = "0.14"
+rpassword = "7.0"
+sha3 = { workspace = true }  # This works!
