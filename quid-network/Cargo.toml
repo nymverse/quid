@@ -1,0 +1,16 @@
+[package]
+name = "quid-network"
+version = "0.1.0"
+edition = "2021"
+description = "Networking layer for QuID protocol"
+
+[dependencies]
+quid-core = { path = "../quid-core" }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# Add test dependencies as needed
+

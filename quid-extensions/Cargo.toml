@@ -1,0 +1,13 @@
+[package]
+name = "quid-extensions"
+version = "0.1.0"
+edition = "2021"
+description = "Standard extensions for QuID identities"
+
+[dependencies]
+quid-core = { path = "../quid-core" }
+serde = { workspace = true }
+anyhow = { workspace = true }
+
+[dev-dependencies]
+# Add test dependencies as needed

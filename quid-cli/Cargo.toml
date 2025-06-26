@@ -1,0 +1,20 @@
+[package]
+name = "quid-cli"
+version = "0.1.0"
+edition = "2021"
+description = "Command-line interface for QuID"
+
+[[bin]]
+name = "quid"
+path = "src/main.rs"
+
+[dependencies]
+quid-core = { path = "../quid-core" }
+clap = { version = "4.0", features = ["derive"] }
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+hex = { workspace = true }
+secrecy = { workspace = true }
+
+

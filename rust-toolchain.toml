@@ -1,0 +1,5 @@
+# rust-toolchain.toml
+[toolchain]
+channel = "1.75.0"
+components = ["rustfmt", "clippy", "miri"]
+targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]

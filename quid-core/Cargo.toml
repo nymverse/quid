@@ -1,0 +1,19 @@
+[package]
+name = "quid-core"
+version = "0.1.0"
+edition = "2021"
+description = "Core quantum-resistant identity protocol implementation"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+# Inherit from workspace
+sha3 = { workspace = true }
+zeroize = { workspace = true }
+secrecy = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+hex = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
