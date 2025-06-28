@@ -90,53 +90,81 @@
 
 ### 2.2 Security Hardening & Testing
 
-- [ ] **Week 13: Memory Security Implementation**
+- [x] **Week 13: Memory Security Implementation**
   - Implement secure memory clearing throughout codebase
   - Add protection against timing attacks where possible
   - Ensure proper zeroization of sensitive data
   - Add memory protection for key material
 
-- [ ] **Week 14: Comprehensive Testing Suite**
+- [x] **Week 14: Comprehensive Testing Suite**
   - Create integration test suite
   - Add property-based testing for all crypto operations
   - Implement fuzzing for input validation
   - Add performance benchmarks and regression testing
 
-## Phase 3: Networking & P2P Protocol (Months 7-9)
+## Phase 3: Nym Token Chain & QuID Network
 
-### 3.1 Async Networking Foundation
+### 3.1 Nym Token Chain Foundation (Crypto-First Approach)
 
-- [ ] **Week 15-16: Core Network Types**
-  - Implement async networking using tokio
-  - Create NetworkNode struct for peer management
-  - Add quantum-resistant message encryption using ML-KEM
-  - Implement peer authentication using ML-DSA
+- [ ] **Week 15-16: Blockchain Foundation**
+  - Implement minimal blockchain for NYM token consensus
+  - Create transaction structure for NYM transfers
+  - Add QuID-based validator system using ML-DSA signatures
+  - Implement basic consensus protocol for double-spend prevention
 
-- [ ] **Week 17: Quantum-Resistant DHT**
+- [ ] **Week 17: Token Economics & Validation**
+  - Implement NYM token with supply/distribution rules
+  - Add fee distribution system (dev fund, validators, ecosystem)
+  - Create validator staking mechanism using QuID identities
+  - Add domain registration pricing and auction system
+
+- [ ] **Week 18: Consensus Integration**
+  - Integrate Nym chain with QuID core identity system
+  - Add transaction signing using QuID private keys
+  - Implement balance queries and transaction history
+  - Create wallet functionality within CLI
+
+### 3.2 QuID DHT Content Layer
+
+- [ ] **Week 19: Core DHT Implementation**
   - Implement distributed hash table using SHAKE256 for consistent hashing
-  - Add peer discovery and routing mechanisms
-  - Create routing table management
-  - Implement bootstrap node functionality
+  - Add peer discovery and routing mechanisms using quantum-resistant protocols
+  - Create routing table management with QuID-based node authentication
+  - Implement bootstrap node functionality for network entry
 
-- [ ] **Week 18: Message Encryption & Authentication**
-  - Implement end-to-end encryption for all network messages
+- [ ] **Week 20: Domain System & Content Storage**
+  - Implement domain resolution (alice.quid → QuID + content) via DHT
+  - Add mutable content system with QuID signature-based updates
+  - Create content deletion mechanism (Alice can rewrite/delete history)
+  - Add local content caching with configurable sync strategies
+
+### 3.3 Network Integration & Marketplace
+
+- [ ] **Week 21: Offline-First Synchronization**
+  - Implement peer-to-peer content synchronization
+  - Add social graph-based content discovery (friends-of-friends)
+  - Create configurable sync policies (storage limits, priority domains)
+  - Add conflict resolution for concurrent updates
+
+- [ ] **Week 22: Domain Marketplace & Discovery**
+  - Integrate NYM token payments with domain registration
+  - Create domain marketplace for buying/selling domains
+  - Add domain discovery mechanisms (categories, search, trending)
+  - Implement bootstrap strategy with seed domains and social onboarding
+
+### 3.4 Network Protocol Implementation
+
+- [ ] **Week 23: Message Encryption & Authentication**
+  - Implement end-to-end encryption for all network messages using ML-KEM
   - Add forward secrecy through key rotation
   - Create replay protection mechanisms
   - Add traffic analysis resistance features
 
-### 3.2 P2P Protocol Implementation
-
-- [ ] **Week 19: Connection Management**
+- [ ] **Week 24: Connection Management & Optimization**
   - Implement connection pooling and management
   - Add automatic reconnection and failover
   - Create connection health monitoring
   - Implement rate limiting and DoS protection
-
-- [ ] **Week 20: Message Routing & Gossip Protocol**
-  - Implement message routing through DHT
-  - Add gossip protocol for peer discovery
-  - Create message caching and deduplication
-  - Add network topology optimization
 
 ## Phase 4: Web Integration & Browser Support (Months 10-11)
 

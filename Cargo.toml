@@ -3,7 +3,9 @@ members = [
     "quid-core",
     "quid-cli",
     "quid-network", 
-    "quid-extensions"
+    "quid-extensions",
+    "quid-consensus",
+    "quid-node"
 ]
 resolver = "2"
 
@@ -36,6 +38,11 @@ rand = "0.8"
 # Testing
 proptest = "1.4"
 hex = "0.4"
+
+libp2p = "0.53"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+toml = "0.8"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

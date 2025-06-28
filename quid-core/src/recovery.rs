@@ -15,7 +15,7 @@ pub struct RecoveryShare {
     /// Share identifier (1 to n)
     pub share_id: u8,
     /// Threshold required to recover (t)
-    pub _threshold: u8,
+    pub threshold: u8,
     /// Total number of shares (n)
     pub total_shares: u8,
     /// The encrypted share data

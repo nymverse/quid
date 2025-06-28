@@ -1,28 +1,21 @@
 [package]
-name = "quid-network"
+name = "quid-consensus"
 version = "0.1.0"
 edition = "2021"
-description = "QuID decentralized network and content layer"
+description = "Minimal consensus layer for NYM tokens"
 
 [dependencies]
 quid-core = { path = "../quid-core" }
 quid-consensus = { path = "../quid-consensus" }
-tokio = { workspace = true, features = ["full"] }
+clap = { version = "4.0", features = ["derive"] }
+tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha3 = { workspace = true }
 hex = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
-bincode = { workspace = true }
-
-# Networking
-tokio-util = { version = "0.7", features = ["codec"] }
-futures = "0.3"
-
-# Data structures
-lru = "0.12"
-dashmap = "5.5"
+secrecy = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
