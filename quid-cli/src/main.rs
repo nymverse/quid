@@ -2,7 +2,6 @@
 
 use clap::{Parser, Subcommand};
 use quid_core::{QuIDIdentity, SecurityLevel, RecoveryCoordinator, RecoveryShare, GuardianInfo};
-use quid_consensus::{Block, Blockchain, NymTransaction, TransactionType, NymAmount};
 use secrecy::{ExposeSecret, Secret};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -12,7 +11,7 @@ use std::io::{self, Write};
 
 #[derive(Parser)]
 #[command(name = "quid")]
-#[command(about = "Quantum-resistant Identity Protocol CLI")]
+#[command(about = "Universal Quantum-Resistant Authentication CLI")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -83,6 +82,31 @@ enum Commands {
         #[arg(short, long)]
         output: PathBuf,
     },
+    /// Authenticate to a service or application
+    Auth {
+        /// Identity file path
+        identity: PathBuf,
+        /// Service or application name
+        service: String,
+        /// Network type (web, ssh, bitcoin, ethereum, nym, etc.)
+        #[arg(short, long, default_value = "web")]
+        network: String,
+        /// Required capabilities (comma-separated)
+        #[arg(short, long)]
+        capabilities: Option<String>,
+    },
+    /// Generate keys for a specific network
+    Derive {
+        /// Identity file path
+        identity: PathBuf,
+        /// Network type (bitcoin, ethereum, ssh, nym, nomadnet, etc.)
+        network: String,
+        /// Show private keys (dangerous!)
+        #[arg(long)]
+        show_private: bool,
+    },
+    /// List supported network adapters
+    Adapters,
     Recovery {
         #[command(subcommand)]
         recovery_command: RecoveryCommands,
@@ -91,72 +115,9 @@ enum Commands {
         #[command(subcommand)]
         batch_command: BatchCommands,
     },
-    Consensus {
-        #[command(subcommand)]
-        consensus_command: ConsensusCommands,
-    },
     
 }
 
-#[derive(Subcommand)]
-enum ConsensusCommands {
-    /// Initialize a new blockchain with genesis block
-    Init {
-        /// Output file for blockchain data
-        #[arg(short, long, default_value = "blockchain.json")]
-        output: PathBuf,
-        /// Initial NYM token distribution
-        #[arg(long, default_value = "1000000")]
-        initial_supply: u64,
-    },
-    /// Start a validator node
-    Validator {
-        /// Identity file for this validator
-        identity: PathBuf,
-        /// Blockchain file
-        #[arg(short, long, default_value = "blockchain.json")]
-        blockchain: PathBuf,
-        /// Stake amount to become validator
-        #[arg(long, default_value = "1000")]
-        stake: u64,
-    },
-    /// Send NYM tokens
-    Send {
-        /// Sender identity
-        from: PathBuf,
-        /// Recipient QuID ID (hex)
-        to: String,
-        /// Amount to send
-        amount: u64,
-        /// Transaction fee
-        #[arg(long, default_value = "1")]
-        fee: u64,
-    },
-    /// Check NYM balance
-    Balance {
-        /// Identity to check
-        identity: PathBuf,
-        /// Blockchain file
-        #[arg(short, long, default_value = "blockchain.json")]
-        blockchain: PathBuf,
-    },
-    /// Register a domain
-    RegisterDomain {
-        /// Owner identity
-        identity: PathBuf,
-        /// Domain name (e.g., alice.quid)
-        domain: String,
-        /// Registration fee
-        #[arg(long, default_value = "10")]
-        fee: u64,
-    },
-    /// Show blockchain info
-    Info {
-        /// Blockchain file
-        #[arg(short, long, default_value = "blockchain.json")]
-        blockchain: PathBuf,
-    },
-}
 
 #[derive(Subcommand)]
 enum RecoveryCommands {
@@ -849,7 +810,7 @@ fn main() -> anyhow::Result<()> {
                     for i in 1..=total_shares {
                         println!("👤 Guardian {} of {}:", i, total_shares);
                         print!("   Name: ");
-                        std::io::Write::flush(&mut std::io::stdout())?;
+                        io::Write::flush(&mut io::stdout())?;
                         let mut name = String::new();
                         std::io::stdin().read_line(&mut name)?;
                         let name = name.trim().to_string();
@@ -859,7 +820,7 @@ fn main() -> anyhow::Result<()> {
                         }
                         
                         print!("   Contact (email/phone): ");
-                        std::io::Write::flush(&mut std::io::stdout())?;
+                        io::Write::flush(&mut io::stdout())?;
                         let mut contact = String::new();
                         std::io::stdin().read_line(&mut contact)?;
                         let contact = contact.trim().to_string();
@@ -905,7 +866,7 @@ fn main() -> anyhow::Result<()> {
                     println!("⚠️  Keep the share files secure and private");
                 }
                 
-                RecoveryCommands::Restore { shares_dir, output } => {
+                RecoveryCommands::Restore { shares_dir, output: _ } => {
                     println!("🔓 Restoring identity from recovery shares...");
                     
                     // Scan for recovery share files
@@ -949,7 +910,7 @@ fn main() -> anyhow::Result<()> {
                         return Err(anyhow::anyhow!("Multiple identities found - please separate shares"));
                     }
                     
-                    let (identity_id, shares) = shares_by_identity.into_iter().next().unwrap();
+                    let (_identity_id, shares) = shares_by_identity.into_iter().next().unwrap();
                     
                     if shares.is_empty() {
                         return Err(anyhow::anyhow!("No valid shares found"));
@@ -1396,363 +1357,165 @@ fn main() -> anyhow::Result<()> {
             }
         }
 
-        Commands::Consensus { consensus_command } => {
-            match consensus_command {
-                ConsensusCommands::Init { identities, output, total_supply } => {
-                    println!("🌱 Initializing new blockchain...");
-                    
-                    let mut initial_distribution = Vec::new();
-                    let mut remaining_supply = total_supply;
-                    
-                    if identities.is_empty() {
-                        // Create a default identity with all tokens
-                        let (identity, _) = QuIDIdentity::new(SecurityLevel::Level1)?;
-                        initial_distribution.push((identity, total_supply));
-                        println!("💰 Allocated {} NYM to default identity", total_supply);
-                    } else {
-                        // Distribute among provided identities
-                        let per_identity = total_supply / identities.len() as u64;
-                        
-                        for identity_path in identities {
-                            let content = std::fs::read_to_string(&identity_path)?;
-                            let cli_identity: CliIdentity = serde_json::from_str(&content)?;
-                            
-                            let amount = std::cmp::min(per_identity, remaining_supply);
-                            initial_distribution.push((cli_identity.identity.clone(), amount));
-                            remaining_supply -= amount;
-                            
-                            println!("💰 Allocated {} NYM to {}", amount, 
-                                hex::encode(&cli_identity.identity.id)[..16].to_string() + "...");
-                        }
-                    }
-                    
-                    // Create genesis block
-                    let genesis_block = Block::genesis(initial_distribution)?;
-                    let blockchain = Blockchain::new(genesis_block)?;
-                    
-                    // Save blockchain
-                    let blockchain_data = BlockchainData::from_blockchain(&blockchain);
-                    blockchain_data.save(&output)?;
-                    
-                    println!("✅ Blockchain initialized!");
-                    println!("📁 Saved to: {}", output.display());
-                    println!("⛓️  Genesis block height: {}", blockchain.height());
-                    println!("💎 Total supply: {} NYM", total_supply);
-                }
-                
-                ConsensusCommands::Send { from, to, amount, fee, blockchain } => {
-                    println!("💸 Sending {} NYM tokens...", amount);
-                    
-                    // Load sender identity
-                    let sender_content = std::fs::read_to_string(&from)?;
-                    let sender_identity: CliIdentity = serde_json::from_str(&sender_content)?;
-                    let sender_keypair = sender_identity.to_keypair()?;
-                    
-                    // Parse recipient
-                    let recipient_id = parse_quid_id(to)?;
-                    
-                    // Load blockchain
-                    let blockchain_data = BlockchainData::load(&blockchain)?;
-                    let mut blockchain_state = blockchain_data.to_blockchain()?;
-                    
-                    // Check sender balance
-                    let sender_balance = blockchain_state.get_balance(&sender_identity.identity.id);
-                    let total_needed = amount + fee;
-                    
-                    if sender_balance < total_needed {
-                        return Err(anyhow::anyhow!(
-                            "Insufficient balance: need {}, have {}", 
-                            total_needed, sender_balance
-                        ));
-                    }
-                    
-                    // Create transaction
-                    let mut tx = NymTransaction::new(
-                        TransactionType::Transfer {
-                            to: recipient_id.clone(),
-                            amount,
-                        },
-                        sender_identity.identity.id.clone(),
-                        blockchain_state.get_nonce(&sender_identity.identity.id) + 1,
-                        fee,
-                    );
-                    
-                    // Sign transaction
-                    tx.sign(&sender_keypair)?;
-                    
-                    // Create block with transaction
-                    let previous_hash = blockchain_state.latest_block()
-                        .map(|b| b.hash())
-                        .transpose()?
-                        .unwrap_or_else(|| vec![0; 32]);
-                    
-                    let block = Block::new(
-                        blockchain_state.height() + 1,
-                        previous_hash,
-                        vec![tx],
-                        sender_identity.identity.id.clone(),
-                    )?;
-                    
-                    // Add block to blockchain
-                    blockchain_state.add_block(block)?;
-                    
-                    // Save updated blockchain
-                    let updated_data = BlockchainData::from_blockchain(&blockchain_state);
-                    updated_data.save(&blockchain)?;
-                    
-                    println!("✅ Transaction successful!");
-                    println!("💸 Sent: {} NYM", amount);
-                    println!("💰 Fee: {} NYM", fee);
-                    println!("🏦 Sender balance: {} NYM", 
-                        blockchain_state.get_balance(&sender_identity.identity.id));
-                    println!("📦 Block height: {}", blockchain_state.height());
-                }
-                
-                ConsensusCommands::Balance { identity, blockchain } => {
-                    // Load identity
-                    let content = std::fs::read_to_string(&identity)?;
-                    let cli_identity: CliIdentity = serde_json::from_str(&content)?;
-                    
-                    // Load blockchain
-                    let blockchain_data = BlockchainData::load(&blockchain)?;
-                    let blockchain_state = blockchain_data.to_blockchain()?;
-                    
-                    let balance = blockchain_state.get_balance(&cli_identity.identity.id);
-                    let nonce = blockchain_state.get_nonce(&cli_identity.identity.id);
-                    
-                    println!("💰 NYM Balance Information");
-                    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                    println!("🆔 Identity: {}...{}", 
-                        &hex::encode(&cli_identity.identity.id)[..16],
-                        &hex::encode(&cli_identity.identity.id)[48..]
-                    );
-                    println!("💎 Balance: {} NYM", balance);
-                    println!("🔢 Nonce: {}", nonce);
-                    println!("⛓️  Blockchain height: {}", blockchain_state.height());
-                }
-                
-                ConsensusCommands::RegisterDomain { identity, domain, fee, blockchain } => {
-                    println!("🌐 Registering domain: {}", domain);
-                    
-                    // Load identity
-                    let content = std::fs::read_to_string(&identity)?;
-                    let cli_identity: CliIdentity = serde_json::from_str(&content)?;
-                    let keypair = cli_identity.to_keypair()?;
-                    
-                    // Load blockchain
-                    let blockchain_data = BlockchainData::load(&blockchain)?;
-                    let mut blockchain_state = blockchain_data.to_blockchain()?;
-                    
-                    // Check if domain is available
-                    if !blockchain_state.is_domain_available(&domain) {
-                        return Err(anyhow::anyhow!("Domain {} is already registered", domain));
-                    }
-                    
-                    // Create domain registration transaction
-                    let mut tx = NymTransaction::new(
-                        TransactionType::DomainRegistration {
-                            domain: domain.clone(),
-                            fee,
-                        },
-                        cli_identity.identity.id.clone(),
-                        blockchain_state.get_nonce(&cli_identity.identity.id) + 1,
-                        1, // Transaction fee
-                    );
-                    
-                    // Sign transaction
-                    tx.sign(&keypair)?;
-                    
-                    // Create block
-                    let previous_hash = blockchain_state.latest_block()
-                        .map(|b| b.hash())
-                        .transpose()?
-                        .unwrap_or_else(|| vec![0; 32]);
-                    
-                    let block = Block::new(
-                        blockchain_state.height() + 1,
-                        previous_hash,
-                        vec![tx],
-                        cli_identity.identity.id.clone(),
-                    )?;
-                    
-                    // Add block to blockchain
-                    blockchain_state.add_block(block)?;
-                    
-                    // Save updated blockchain
-                    let updated_data = BlockchainData::from_blockchain(&blockchain_state);
-                    updated_data.save(&blockchain)?;
-                    
-                    println!("✅ Domain registered successfully!");
-                    println!("🌐 Domain: {}", domain);
-                    println!("👤 Owner: {}...{}", 
-                        &hex::encode(&cli_identity.identity.id)[..16],
-                        &hex::encode(&cli_identity.identity.id)[48..]
-                    );
-                    println!("💰 Cost: {} NYM", fee + 1);
-                }
-                
-                ConsensusCommands::Info { blockchain } => {
-                    // Load blockchain
-                    let blockchain_data = BlockchainData::load(&blockchain)?;
-                    let blockchain_state = blockchain_data.to_blockchain()?;
-                    
-                    let latest_block = blockchain_state.latest_block().unwrap();
-                    
-                    println!("⛓️  Blockchain Information");
-                    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                    println!("📏 Height: {}", blockchain_state.height());
-                    println!("📦 Total blocks: {}", blockchain_state.height() + 1);
-                    println!("🕐 Latest block time: {}", format_timestamp(latest_block.header.timestamp));
-                    println!("💸 Latest block fees: {} NYM", latest_block.header.total_fees);
-                    println!("📊 Transactions in latest: {}", latest_block.transactions.len());
-                    println!("🧮 Latest block hash: {}...{}", 
-                        &hex::encode(latest_block.hash().unwrap_or_default())[..16],
-                        &hex::encode(latest_block.hash().unwrap_or_default())[48..]
-                    );
-                }
-                
-                ConsensusCommands::Domains { blockchain } => {
-                    println!("🌐 Registered Domains");
-                    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                    
-                    // Load blockchain
-                    let blockchain_data = BlockchainData::load(&blockchain)?;
-                    let blockchain_state = blockchain_data.to_blockchain()?;
-                    
-                    // Scan all blocks for domain registrations
-                    let mut domains = Vec::new();
-                    for height in 0..=blockchain_state.height() {
-                        if let Some(block) = blockchain_state.get_block(height) {
-                            for tx in &block.transactions {
-                                if let TransactionType::DomainRegistration { domain, fee } = &tx.tx_type {
-                                    domains.push((domain.clone(), tx.from.clone(), *fee, block.header.timestamp));
-                                }
-                            }
-                        }
-                    }
-                    
-                    if domains.is_empty() {
-                        println!("❌ No domains registered yet");
-                        println!("💡 Register one with: quid consensus register-domain <identity> <domain.quid>");
-                    } else {
-                        for (i, (domain, owner, fee, timestamp)) in domains.iter().enumerate() {
-                            println!("{}. 🌐 {}", i + 1, domain);
-                            println!("   👤 Owner: {}...{}", 
-                                &hex::encode(owner)[..16],
-                                &hex::encode(owner)[48..]
-                            );
-                            println!("   💰 Registration fee: {} NYM", fee);
-                            println!("   📅 Registered: {}", format_timestamp(*timestamp));
-                            if i < domains.len() - 1 {
-                                println!("   ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄");
-                            }
-                        }
+        Commands::Auth { identity, service, network, capabilities } => {
+            // Load identity
+            let content = std::fs::read_to_string(&identity)?;
+            let cli_identity: CliIdentity = serde_json::from_str(&content)?;
+            let keypair = cli_identity.to_keypair()?;
+            
+            println!("🔐 Authenticating to service...");
+            println!("🆔 Identity: {}...{}", 
+                &hex::encode(&cli_identity.identity.id)[..16],
+                &hex::encode(&cli_identity.identity.id)[48..]
+            );
+            println!("🌐 Service: {}", service);
+            println!("📡 Network: {}", network);
+            
+            // Generate a challenge (in real use, this would come from the service)
+            let challenge = format!("QuID-Auth-{}-{}-{}", service, network, 
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)?
+                    .as_secs()
+            );
+            
+            // Parse capabilities
+            let capability_list = capabilities
+                .as_ref()
+                .map(|c| c.split(',').map(|s| s.trim().to_string()).collect())
+                .unwrap_or_else(|| vec!["authenticate".to_string()]);
+            
+            println!("🎯 Capabilities: {}", capability_list.join(", "));
+            println!("🔑 Challenge: {}", challenge);
+            
+            // Sign the challenge
+            let signature = keypair.sign(challenge.as_bytes())?;
+            let signature_hex = hex::encode(&signature);
+            
+            // Create authentication response
+            let auth_response = serde_json::json!({
+                "quid_version": "0.1.0",
+                "type": "authentication_response",
+                "identity_id": hex::encode(&cli_identity.identity.id),
+                "service": service,
+                "network": network,
+                "challenge": challenge,
+                "signature": signature_hex,
+                "public_key": hex::encode(&cli_identity.identity.public_key),
+                "capabilities": capability_list,
+                "timestamp": std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)?
+                    .as_secs()
+            });
+            
+            println!();
+            println!("✅ Authentication response generated!");
+            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            println!("{}", serde_json::to_string_pretty(&auth_response)?);
+            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            println!("💡 Send this response to the service for authentication");
+        }
+        
+        Commands::Derive { identity, network, show_private } => {
+            // Load identity
+            let content = std::fs::read_to_string(&identity)?;
+            let cli_identity: CliIdentity = serde_json::from_str(&content)?;
+            
+            println!("🔑 Deriving keys for network: {}", network);
+            println!("🆔 Identity: {}...{}", 
+                &hex::encode(&cli_identity.identity.id)[..16],
+                &hex::encode(&cli_identity.identity.id)[48..]
+            );
+            
+            // Simple key derivation example (in production this would use proper adapters)
+            let mut hasher = Sha3_256::new();
+            Digest::update(&mut hasher, &cli_identity.identity.public_key);
+            Digest::update(&mut hasher, network.as_bytes());
+            Digest::update(&mut hasher, b"QuID-NetworkKey");
+            let derived_key = hasher.finalize();
+            
+            println!();
+            println!("🔐 Derived Keys for {}", network);
+            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            
+            match network.as_str() {
+                "bitcoin" => {
+                    println!("₿ Bitcoin Address: 1{}...", &hex::encode(&derived_key)[..16]);
+                    println!("🔑 Public Key: {}", hex::encode(&derived_key));
+                    if show_private {
+                        let private_hex = hex::encode(&cli_identity.private_key_hex.as_bytes());
+                        println!("⚠️  Private Key: {} (KEEP SECRET!)", &private_hex[..32.min(private_hex.len())]);
                     }
                 }
-                
-                ConsensusCommands::Mine { identity, blockchain } => {
-                    println!("⛏️  Mining new block...");
-                    
-                    // Load identity
-                    let content = std::fs::read_to_string(&identity)?;
-                    let cli_identity: CliIdentity = serde_json::from_str(&content)?;
-                    
-                    // Load blockchain
-                    let blockchain_data = BlockchainData::load(&blockchain)?;
-                    let mut blockchain_state = blockchain_data.to_blockchain()?;
-                    
-                    // Create empty block (for testing)
-                    let previous_hash = blockchain_state.latest_block()
-                        .map(|b| b.hash())
-                        .transpose()?
-                        .unwrap_or_else(|| vec![0; 32]);
-                    
-                    let block = Block::new(
-                        blockchain_state.height() + 1,
-                        previous_hash,
-                        vec![], // Empty block
-                        cli_identity.identity.id.clone(),
-                    )?;
-                    
-                    blockchain_state.add_block(block.clone())?;
-                    
-                    // Save updated blockchain
-                    let updated_data = BlockchainData::from_blockchain(&blockchain_state);
-                    updated_data.save(&blockchain)?;
-                    
-                    println!("✅ Block mined!");
-                    println!("📦 Block height: {}", block.header.height);
-                    println!("🕐 Timestamp: {}", format_timestamp(block.header.timestamp));
-                    println!("👤 Miner: {}...{}", 
-                        &hex::encode(&cli_identity.identity.id)[..16],
-                        &hex::encode(&cli_identity.identity.id)[48..]
-                    );
-                }
-                
-                ConsensusCommands::TransferDomain { from, to, domain, fee, blockchain } => {
-                    println!("🔄 Transferring domain: {}", domain);
-                    
-                    // Load sender identity
-                    let content = std::fs::read_to_string(&from)?;
-                    let cli_identity: CliIdentity = serde_json::from_str(&content)?;
-                    let keypair = cli_identity.to_keypair()?;
-                    
-                    // Parse recipient
-                    let recipient_id = parse_quid_id(to)?;
-                    
-                    // Load blockchain
-                    let blockchain_data = BlockchainData::load(&blockchain)?;
-                    let mut blockchain_state = blockchain_data.to_blockchain()?;
-                    
-                    // Check domain ownership
-                    if blockchain_state.get_domain_owner(&domain) != Some(cli_identity.identity.id.as_slice()) {
-                        return Err(anyhow::anyhow!("You don't own domain {}", domain));
+                "ethereum" => {
+                    println!("⟠ Ethereum Address: 0x{}", &hex::encode(&derived_key)[..40]);
+                    println!("🔑 Public Key: {}", hex::encode(&derived_key));
+                    if show_private {
+                        let private_hex = hex::encode(&cli_identity.private_key_hex.as_bytes());
+                        println!("⚠️  Private Key: 0x{} (KEEP SECRET!)", &private_hex[..32.min(private_hex.len())]);
                     }
-                    
-                    // Create domain transfer transaction
-                    let mut tx = NymTransaction::new(
-                        TransactionType::DomainTransfer {
-                            domain: domain.clone(),
-                            to: recipient_id.clone(),
-                            fee,
-                        },
-                        cli_identity.identity.id.clone(),
-                        blockchain_state.get_nonce(&cli_identity.identity.id) + 1,
-                        1, // Transaction fee
-                    );
-                    
-                    // Sign transaction
-                    tx.sign(&keypair)?;
-                    
-                    // Create block
-                    let previous_hash = blockchain_state.latest_block()
-                        .map(|b| b.hash())
-                        .transpose()?
-                        .unwrap_or_else(|| vec![0; 32]);
-                    
-                    let block = Block::new(
-                        blockchain_state.height() + 1,
-                        previous_hash,
-                        vec![tx],
-                        cli_identity.identity.id.clone(),
-                    )?;
-                    
-                    // Add block to blockchain
-                    blockchain_state.add_block(block)?;
-                    
-                    // Save updated blockchain
-                    let updated_data = BlockchainData::from_blockchain(&blockchain_state);
-                    updated_data.save(&blockchain)?;
-                    
-                    println!("✅ Domain transferred successfully!");
-                    println!("🌐 Domain: {}", domain);
-                    println!("👤 New owner: {}...{}", 
-                        &hex::encode(&recipient_id)[..16],
-                        &hex::encode(&recipient_id)[48..]
-                    );
-                    println!("💰 Transfer fee: {} NYM", fee + 1);
+                }
+                "nym" => {
+                    println!("🔮 Nym Address: nym1{}", &hex::encode(&derived_key)[..32]);
+                    println!("🔑 Signing Key: {}", hex::encode(&derived_key));
+                    if show_private {
+                        let private_hex = hex::encode(&cli_identity.private_key_hex.as_bytes());
+                        println!("⚠️  Private Key: {} (KEEP SECRET!)", &private_hex[..32.min(private_hex.len())]);
+                    }
+                }
+                "nomadnet" => {
+                    println!("🌐 NomadNet Domain: {}.nomad", &hex::encode(&derived_key)[..16]);
+                    println!("🔑 Content Key: {}", hex::encode(&derived_key));
+                    if show_private {
+                        let private_hex = hex::encode(&cli_identity.private_key_hex.as_bytes());
+                        println!("⚠️  Private Key: {} (KEEP SECRET!)", &private_hex[..32.min(private_hex.len())]);
+                    }
+                }
+                "ssh" => {
+                    println!("🖥️  SSH Public Key: ssh-ed25519 {} quid@{}", 
+                        &hex::encode(&derived_key)[..32], network);
+                    if show_private {
+                        println!("⚠️  SSH Private Key: Available (use with ssh-agent)");
+                    }
+                }
+                _ => {
+                    println!("🔧 Generic Network: {}", network);
+                    println!("🔑 Derived Key: {}", hex::encode(&derived_key));
+                    if show_private {
+                        let private_hex = hex::encode(&cli_identity.private_key_hex.as_bytes());
+                        println!("⚠️  Master Private Key: {} (KEEP SECRET!)", 
+                            &private_hex[..32.min(private_hex.len())]);
+                    }
                 }
             }
+            
+            if !show_private {
+                println!();
+                println!("💡 Use --show-private to display private keys (dangerous!)");
+            }
+        }
+        
+        Commands::Adapters => {
+            println!("🔌 Supported Network Adapters");
+            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            
+            let adapters = vec![
+                ("web", "Web authentication (WebAuthn replacement)", "🌐"),
+                ("ssh", "SSH key authentication", "🖥️"),
+                ("bitcoin", "Bitcoin transaction signing", "₿"),
+                ("ethereum", "Ethereum/EVM transaction signing", "⟠"),
+                ("nym", "Nym blockchain integration", "🔮"),
+                ("nomadnet", "NomadNet social platform", "🌐"),
+                ("tls", "TLS client certificates", "🔒"),
+                ("oauth", "OAuth/OIDC provider", "🔑"),
+            ];
+            
+            for (i, (network, description, icon)) in adapters.iter().enumerate() {
+                println!("{}. {} {} - {}", i + 1, icon, network, description);
+            }
+            
+            println!();
+            println!("💡 Use 'quid derive <identity> <network>' to generate keys");
+            println!("💡 Use 'quid auth <identity> <service> --network <network>' to authenticate");
         }
     }
     
