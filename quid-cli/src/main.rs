@@ -1,12 +1,13 @@
 //! QuID Command Line Interface
 
 use clap::{Parser, Subcommand};
-use quid_core::{QuIDIdentity, SecurityLevel};
+use quid_core::{QuIDIdentity, SecurityLevel, RecoveryCoordinator, RecoveryShare, GuardianInfo};
 use secrecy::{ExposeSecret, Secret};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use sha3::{Digest, Sha3_256, Shake256};
 use sha3::digest::{Update, ExtendableOutput, XofReader};
+use std::io::{self, Write};
 
 #[derive(Parser)]
 #[command(name = "quid")]
@@ -81,6 +82,93 @@ enum Commands {
         #[arg(short, long)]
         output: PathBuf,
     },
+    Recovery {
+        #[command(subcommand)]
+        recovery_command: RecoveryCommands,
+    },
+    Batch {
+        #[command(subcommand)]
+        batch_command: BatchCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum RecoveryCommands {
+    /// Generate recovery shares (t-of-n threshold)
+    Generate {
+        /// Identity file to create recovery for
+        identity: PathBuf,
+        /// Number of shares to create (n)
+        #[arg(short = 'n', long, default_value = "5")]
+        total_shares: u8,
+        /// Threshold needed to recover (t)
+        #[arg(short = 't', long, default_value = "3")]
+        threshold: u8,
+        /// Output directory for shares
+        #[arg(short, long, default_value = "recovery-shares")]
+        output_dir: PathBuf,
+    },
+    /// Recover identity from shares
+    Restore {
+        /// Directory containing recovery shares
+        shares_dir: PathBuf,
+        /// Output file for recovered identity  
+        #[arg(short, long)]
+        output: PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
+enum BatchCommands {
+    /// Sign multiple messages from a file
+    Sign {
+        /// Identity file path
+        identity: PathBuf,
+        /// Input file containing messages (one per line)
+        input: PathBuf,
+        /// Output file for signatures
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Input format: text, json, or csv
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+    /// Verify multiple signatures from a file
+    Verify {
+        /// Identity file path  
+        identity: PathBuf,
+        /// Input file containing signatures
+        input: PathBuf,
+        /// Report format: summary, detailed, or json
+        #[arg(short, long, default_value = "summary")]
+        report: String,
+    },
+    /// Sign all files in a directory
+    SignFiles {
+        /// Identity file path
+        identity: PathBuf,
+        /// Directory containing files to sign
+        directory: PathBuf,
+        /// Output directory for signatures
+        #[arg(short, long)]
+        output_dir: PathBuf,
+        /// File extensions to sign (e.g., txt,md,json)
+        #[arg(short, long, default_value = "txt,md,json")]
+        extensions: String,
+    },
+    /// Create signed manifest of directory contents
+    Manifest {
+        /// Identity file path
+        identity: PathBuf,
+        /// Directory to create manifest for
+        directory: PathBuf,
+        /// Output manifest file
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Include file contents hash
+        #[arg(long)]
+        include_hashes: bool,
+    },
 }
 
 /// SHA3-based encrypted backup format
@@ -94,6 +182,44 @@ struct EncryptedBackup {
     iterations: u32,         // PBKDF2 iterations
     encrypted_data: String,  // Hex encoded
     created: u64,
+}
+
+/// Batch signature format for JSON output
+#[derive(Serialize, Deserialize)]
+struct BatchSignature {
+    message: String,
+    signature: String,
+    timestamp: u64,
+    identity_id: String,
+}
+
+/// Batch verification result
+#[derive(Serialize, Deserialize)]
+struct VerificationResult {
+    message: String,
+    signature: String,
+    valid: bool,
+    error: Option<String>,
+}
+
+/// File manifest entry
+#[derive(Serialize, Deserialize)]
+struct ManifestEntry {
+    path: String,
+    size: u64,
+    modified: u64,
+    signature: String,
+    content_hash: Option<String>,
+}
+
+/// Complete manifest file
+#[derive(Serialize, Deserialize)]
+struct FileManifest {
+    version: String,
+    created_at: u64,
+    identity_id: String,
+    entries: Vec<ManifestEntry>,
+    manifest_signature: String,
 }
 
 /// Professional key derivation using PBKDF2 with SHA3
@@ -620,6 +746,586 @@ fn main() -> anyhow::Result<()> {
                     println!("✅ Plain identity imported to: {}", output.display());
                 } else {
                     return Err(anyhow::anyhow!("❌ Invalid backup file format"));
+                }
+            }
+        }
+
+        Commands::Recovery { recovery_command } => {
+            match recovery_command {
+                RecoveryCommands::Generate { identity, total_shares, threshold, output_dir } => {
+                    // Load identity
+                    let content = std::fs::read_to_string(&identity)?;
+                    let cli_identity: CliIdentity = serde_json::from_str(&content)?;
+                    let keypair = cli_identity.to_keypair()?;
+                    
+                    // Validate parameters
+                    if threshold > total_shares {
+                        return Err(anyhow::anyhow!("Threshold ({}) cannot exceed total shares ({})", threshold, total_shares));
+                    }
+                    if threshold == 0 {
+                        return Err(anyhow::anyhow!("Threshold must be at least 1"));
+                    }
+                    if total_shares == 0 {
+                        return Err(anyhow::anyhow!("Total shares must be at least 1"));
+                    }
+                    
+                    println!("🔐 Generating recovery shares for identity...");
+                    println!("🆔 Identity: {}...{}", 
+                        &hex::encode(&cli_identity.identity.id)[..16],
+                        &hex::encode(&cli_identity.identity.id)[48..]
+                    );
+                    println!("📊 Configuration: {}-of-{} threshold", threshold, total_shares);
+                    println!();
+                    
+                    // Collect guardian information
+                    let mut guardians = Vec::new();
+                    
+                    for i in 1..=total_shares {
+                        println!("👤 Guardian {} of {}:", i, total_shares);
+                        print!("   Name: ");
+                        std::io::Write::flush(&mut std::io::stdout())?;
+                        let mut name = String::new();
+                        std::io::stdin().read_line(&mut name)?;
+                        let name = name.trim().to_string();
+                        
+                        if name.is_empty() {
+                            return Err(anyhow::anyhow!("Guardian name cannot be empty"));
+                        }
+                        
+                        print!("   Contact (email/phone): ");
+                        std::io::Write::flush(&mut std::io::stdout())?;
+                        let mut contact = String::new();
+                        std::io::stdin().read_line(&mut contact)?;
+                        let contact = contact.trim().to_string();
+                        
+                        guardians.push(GuardianInfo {
+                            name,
+                            contact,
+                            public_key: Vec::new(), // No guardian keys for now
+                        });
+                        println!();
+                    }
+                    
+                    // Generate shares
+                    println!("🔄 Generating recovery shares...");
+                    let shares = RecoveryCoordinator::generate_shares(
+                        &keypair,
+                        &cli_identity.identity.id,
+                        guardians,
+                        threshold,
+                    )?;
+                    
+                    // Create output directory
+                    std::fs::create_dir_all(&output_dir)?;
+                    
+                    // Save each share to a separate file
+                    for (i, share) in shares.iter().enumerate() {
+                        let filename = format!("recovery-share-{}-of-{}.json", i + 1, total_shares);
+                        let filepath = output_dir.join(&filename);
+                        
+                        let share_json = serde_json::to_string_pretty(share)?;
+                        std::fs::write(&filepath, share_json)?;
+                        
+                        println!("💾 Share {} saved: {}", i + 1, filepath.display());
+                        println!("   👤 Guardian: {}", share.guardian_info.name);
+                        println!("   📧 Contact: {}", share.guardian_info.contact);
+                    }
+                    
+                    println!();
+                    println!("✅ Recovery shares generated successfully!");
+                    println!("📁 Shares directory: {}", output_dir.display());
+                    println!("🔒 Threshold: {} shares needed to recover", threshold);
+                    println!("⚠️  Distribute these shares to your trusted guardians");
+                    println!("⚠️  Keep the share files secure and private");
+                }
+                
+                RecoveryCommands::Restore { shares_dir, output } => {
+                    println!("🔓 Restoring identity from recovery shares...");
+                    
+                    // Scan for recovery share files
+                    let mut share_files = Vec::new();
+                    for entry in std::fs::read_dir(&shares_dir)? {
+                        let entry = entry?;
+                        let path = entry.path();
+                        
+                        if path.extension().and_then(|s| s.to_str()) == Some("json") {
+                            if let Ok(content) = std::fs::read_to_string(&path) {
+                                if let Ok(share) = serde_json::from_str::<RecoveryShare>(&content) {
+                                    share_files.push((path, share));
+                                }
+                            }
+                        }
+                    }
+                    
+                    if share_files.is_empty() {
+                        return Err(anyhow::anyhow!("No recovery shares found in {}", shares_dir.display()));
+                    }
+                    
+                    // Group shares by identity
+                    let mut shares_by_identity: std::collections::HashMap<Vec<u8>, Vec<RecoveryShare>> = std::collections::HashMap::new();
+                    
+                    for (path, share) in share_files {
+                        println!("📄 Found share: {}", path.display());
+                        println!("   👤 Guardian: {}", share.guardian_info.name);
+                        println!("   🆔 For identity: {}...{}", 
+                            &hex::encode(&share.identity_id)[..16],
+                            &hex::encode(&share.identity_id)[48..]
+                        );
+                        
+                        shares_by_identity
+                            .entry(share.identity_id.clone())
+                            .or_insert_with(Vec::new)
+                            .push(share);
+                    }
+                    
+                    if shares_by_identity.len() > 1 {
+                        println!("⚠️  Found shares for {} different identities", shares_by_identity.len());
+                        return Err(anyhow::anyhow!("Multiple identities found - please separate shares"));
+                    }
+                    
+                    let (identity_id, shares) = shares_by_identity.into_iter().next().unwrap();
+                    
+                    if shares.is_empty() {
+                        return Err(anyhow::anyhow!("No valid shares found"));
+                    }
+                    
+                    let threshold = shares[0].threshold;
+                    let total_shares = shares[0].total_shares;
+                    
+                    println!();
+                    println!("📊 Recovery configuration: {}-of-{} threshold", threshold, total_shares);
+                    println!("📋 Available shares: {}", shares.len());
+                    
+                    if shares.len() < threshold as usize {
+                        return Err(anyhow::anyhow!(
+                            "Not enough shares! Need {} shares, found {}",
+                            threshold,
+                            shares.len()
+                        ));
+                    }
+                    
+                    println!("✅ Sufficient shares available for recovery");
+                    println!();
+                    
+                    // We need to reconstruct the identity without the original keypair
+                    // For now, this is a limitation of our placeholder implementation
+                    println!("❌ Recovery not yet fully implemented");
+                    println!("🚧 Current limitation: Need original public key for signature verification");
+                    println!("💡 In production, shares would include public key information");
+                    println!();
+                    println!("🔍 Share details:");
+                    for (i, share) in shares.iter().enumerate() {
+                        println!("   {}. Guardian: {} ({})", i + 1, share.guardian_info.name, share.guardian_info.contact);
+                        println!("      Share ID: {} | Created: {}", 
+                            share.share_id, 
+                            format_timestamp(share.created_at)
+                        );
+                    }
+                    
+                    // TODO: Implement proper recovery when we have real Shamir's Secret Sharing
+                    println!();
+                    println!("⚠️  For now, use 'quid import' with encrypted backups instead");
+                }
+            }
+        }
+
+        Commands::Batch { batch_command } => {
+            match batch_command {
+                BatchCommands::Sign { identity, input, output, format } => {
+                    // Load identity
+                    let content = std::fs::read_to_string(&identity)?;
+                    let cli_identity: CliIdentity = serde_json::from_str(&content)?;
+                    let keypair = cli_identity.to_keypair()?;
+                    
+                    println!("🔏 Batch signing messages...");
+                    println!("🆔 Identity: {}...{}", 
+                        &hex::encode(&cli_identity.identity.id)[..16],
+                        &hex::encode(&cli_identity.identity.id)[48..]
+                    );
+                    
+                    // Read messages based on format
+                    let input_content = std::fs::read_to_string(&input)?;
+                    let messages: Vec<String> = match format.as_str() {
+                        "text" => input_content.lines().map(|s| s.to_string()).collect(),
+                        "json" => {
+                            let json_messages: Vec<String> = serde_json::from_str(&input_content)?;
+                            json_messages
+                        },
+                        "csv" => {
+                            // Simple CSV parsing (first column only)
+                            input_content.lines()
+                                .map(|line| line.split(',').next().unwrap_or("").to_string())
+                                .filter(|s| !s.is_empty())
+                                .collect()
+                        },
+                        _ => return Err(anyhow::anyhow!("Unsupported format: {}", format)),
+                    };
+                    
+                    if messages.is_empty() {
+                        return Err(anyhow::anyhow!("No messages found in input file"));
+                    }
+                    
+                    println!("📋 Found {} messages to sign", messages.len());
+                    
+                    // Sign all messages
+                    let mut signatures = Vec::new();
+                    let timestamp = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)?
+                        .as_secs();
+                    
+                    let start_time = std::time::Instant::now();
+                    
+                    for (i, message) in messages.iter().enumerate() {
+                        if i % 100 == 0 && i > 0 {
+                            println!("🔄 Signed {} of {} messages...", i, messages.len());
+                        }
+                        
+                        let signature = keypair.sign(message.as_bytes())?;
+                        let signature_hex = hex::encode(&signature);
+                        
+                        signatures.push(BatchSignature {
+                            message: message.clone(),
+                            signature: signature_hex,
+                            timestamp,
+                            identity_id: hex::encode(&cli_identity.identity.id),
+                        });
+                    }
+                    
+                    let elapsed = start_time.elapsed();
+                    
+                    // Save signatures
+                    let output_json = serde_json::to_string_pretty(&signatures)?;
+                    std::fs::write(&output, output_json)?;
+                    
+                    println!("✅ Batch signing completed!");
+                    println!("📊 Signed {} messages in {:.2}s", messages.len(), elapsed.as_secs_f64());
+                    println!("⚡ Rate: {:.0} signatures/second", messages.len() as f64 / elapsed.as_secs_f64());
+                    println!("💾 Signatures saved to: {}", output.display());
+                    println!("📄 Output format: JSON");
+                }
+                
+                BatchCommands::Verify { identity, input, report } => {
+                    // Load identity
+                    let content = std::fs::read_to_string(&identity)?;
+                    let cli_identity: CliIdentity = serde_json::from_str(&content)?;
+                    let keypair = cli_identity.to_keypair()?;
+                    
+                    println!("🔍 Batch verifying signatures...");
+                    
+                    // Load signatures
+                    let input_content = std::fs::read_to_string(&input)?;
+                    let signatures: Vec<BatchSignature> = serde_json::from_str(&input_content)?;
+                    
+                    println!("📋 Found {} signatures to verify", signatures.len());
+                    
+                    let start_time = std::time::Instant::now();
+                    let mut results = Vec::new();
+                    let mut valid_count = 0;
+                    let mut invalid_count = 0;
+                    
+                    for (i, sig_data) in signatures.iter().enumerate() {
+                        if i % 100 == 0 && i > 0 {
+                            println!("🔄 Verified {} of {} signatures...", i, signatures.len());
+                        }
+                        
+                        let signature_bytes = match hex::decode(&sig_data.signature) {
+                            Ok(bytes) => bytes,
+                            Err(e) => {
+                                results.push(VerificationResult {
+                                    message: sig_data.message.clone(),
+                                    signature: sig_data.signature.clone(),
+                                    valid: false,
+                                    error: Some(format!("Invalid hex: {}", e)),
+                                });
+                                invalid_count += 1;
+                                continue;
+                            }
+                        };
+                        
+                        match keypair.verify(sig_data.message.as_bytes(), &signature_bytes) {
+                            Ok(is_valid) => {
+                                if is_valid {
+                                    valid_count += 1;
+                                } else {
+                                    invalid_count += 1;
+                                }
+                                results.push(VerificationResult {
+                                    message: sig_data.message.clone(),
+                                    signature: sig_data.signature.clone(),
+                                    valid: is_valid,
+                                    error: None,
+                                });
+                            }
+                            Err(e) => {
+                                results.push(VerificationResult {
+                                    message: sig_data.message.clone(),
+                                    signature: sig_data.signature.clone(),
+                                    valid: false,
+                                    error: Some(format!("Verification error: {}", e)),
+                                });
+                                invalid_count += 1;
+                            }
+                        }
+                    }
+                    
+                    let elapsed = start_time.elapsed();
+                    
+                    // Generate report
+                    match report.as_str() {
+                        "summary" => {
+                            println!();
+                            println!("📊 Batch Verification Summary");
+                            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                            println!("✅ Valid signatures: {}", valid_count);
+                            println!("❌ Invalid signatures: {}", invalid_count);
+                            println!("📋 Total verified: {}", signatures.len());
+                            println!("⚡ Rate: {:.0} verifications/second", signatures.len() as f64 / elapsed.as_secs_f64());
+                            println!("⏱️  Time elapsed: {:.2}s", elapsed.as_secs_f64());
+                            
+                            if invalid_count > 0 {
+                                println!("⚠️  {} signatures failed verification", invalid_count);
+                                let success_rate = (valid_count as f64 / signatures.len() as f64) * 100.0;
+                                println!("📈 Success rate: {:.1}%", success_rate);
+                            } else {
+                                println!("🎉 All signatures verified successfully!");
+                            }
+                        },
+                        "detailed" => {
+                            println!();
+                            println!("📋 Detailed Verification Results");
+                            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                            
+                            for (i, result) in results.iter().enumerate() {
+                                let status = if result.valid { "✅" } else { "❌" };
+                                println!("{}. {} Message: {}", i + 1, status, 
+                                    if result.message.len() > 50 {
+                                        format!("{}...", &result.message[..47])
+                                    } else {
+                                        result.message.clone()
+                                    }
+                                );
+                                
+                                if let Some(error) = &result.error {
+                                    println!("   Error: {}", error);
+                                }
+                            }
+                            
+                            println!();
+                            println!("📊 Summary: {} valid, {} invalid", valid_count, invalid_count);
+                        },
+                        "json" => {
+                            let json_output = serde_json::to_string_pretty(&results)?;
+                            println!("{}", json_output);
+                        },
+                        _ => return Err(anyhow::anyhow!("Invalid report format: {}", report)),
+                    }
+                }
+                
+                BatchCommands::SignFiles { identity, directory, output_dir, extensions } => {
+                    // Load identity
+                    let content = std::fs::read_to_string(&identity)?;
+                    let cli_identity: CliIdentity = serde_json::from_str(&content)?;
+                    let keypair = cli_identity.to_keypair()?;
+                    
+                    println!("📁 Batch signing files in directory...");
+                    println!("🆔 Identity: {}...{}", 
+                        &hex::encode(&cli_identity.identity.id)[..16],
+                        &hex::encode(&cli_identity.identity.id)[48..]
+                    );
+                    
+                    // Parse extensions
+                    let ext_list: Vec<&str> = extensions.split(',').map(|s| s.trim()).collect();
+                    println!("📄 File extensions: {}", ext_list.join(", "));
+                    
+                    // Find files to sign
+                    let mut files_to_sign = Vec::new();
+                    
+                    fn find_files_recursive(
+                        dir: &std::path::Path,
+                        extensions: &[&str],
+                        files: &mut Vec<PathBuf>
+                    ) -> anyhow::Result<()> {
+                        for entry in std::fs::read_dir(dir)? {
+                            let entry = entry?;
+                            let path = entry.path();
+                            
+                            if path.is_dir() {
+                                find_files_recursive(&path, extensions, files)?;
+                            } else if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
+                                if extensions.contains(&ext) {
+                                    files.push(path);
+                                }
+                            }
+                        }
+                        Ok(())
+                    }
+                    
+                    find_files_recursive(&directory, &ext_list, &mut files_to_sign)?;
+                    
+                    if files_to_sign.is_empty() {
+                        return Err(anyhow::anyhow!("No files found with specified extensions"));
+                    }
+                    
+                    println!("📋 Found {} files to sign", files_to_sign.len());
+                    
+                    // Create output directory
+                    std::fs::create_dir_all(&output_dir)?;
+                    
+                    let start_time = std::time::Instant::now();
+                    
+                    for (i, file_path) in files_to_sign.iter().enumerate() {
+                        if i % 10 == 0 && i > 0 {
+                            println!("🔄 Signed {} of {} files...", i, files_to_sign.len());
+                        }
+                        
+                        // Read file content
+                        let file_content = std::fs::read(file_path)?;
+                        
+                        // Sign file content
+                        let signature = keypair.sign(&file_content)?;
+                        let signature_hex = hex::encode(&signature);
+                        
+                        // Create signature file
+                        let relative_path = file_path.strip_prefix(&directory)
+                            .unwrap_or(file_path);
+                        let sig_filename = format!("{}.sig", relative_path.display());
+                        let sig_path = output_dir.join(&sig_filename);
+                        
+                        // Ensure parent directory exists
+                        if let Some(parent) = sig_path.parent() {
+                            std::fs::create_dir_all(parent)?;
+                        }
+                        
+                        // Create signature info
+                        let sig_info = serde_json::json!({
+                            "file_path": relative_path.display().to_string(),
+                            "signature": signature_hex,
+                            "identity_id": hex::encode(&cli_identity.identity.id),
+                            "signed_at": std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)?
+                                .as_secs(),
+                            "file_size": file_content.len(),
+                            "quid_version": "0.1.0"
+                        });
+                        
+                        std::fs::write(&sig_path, serde_json::to_string_pretty(&sig_info)?)?;
+                    }
+                    
+                    let elapsed = start_time.elapsed();
+                    
+                    println!("✅ Batch file signing completed!");
+                    println!("📊 Signed {} files in {:.2}s", files_to_sign.len(), elapsed.as_secs_f64());
+                    println!("⚡ Rate: {:.1} files/second", files_to_sign.len() as f64 / elapsed.as_secs_f64());
+                    println!("📁 Signatures saved to: {}", output_dir.display());
+                }
+                
+                BatchCommands::Manifest { identity, directory, output, include_hashes } => {
+                    // Load identity
+                    let content = std::fs::read_to_string(&identity)?;
+                    let cli_identity: CliIdentity = serde_json::from_str(&content)?;
+                    let keypair = cli_identity.to_keypair()?;
+                    
+                    println!("📋 Creating signed manifest for directory...");
+                    println!("📁 Directory: {}", directory.display());
+                    
+                    // Collect all files
+                    let mut all_files = Vec::new();
+                    
+                    fn collect_files_recursive(
+                        dir: &std::path::Path,
+                        base_dir: &std::path::Path,
+                        files: &mut Vec<PathBuf>
+                    ) -> anyhow::Result<()> {
+                        for entry in std::fs::read_dir(dir)? {
+                            let entry = entry?;
+                            let path = entry.path();
+                            
+                            if path.is_dir() {
+                                collect_files_recursive(&path, base_dir, files)?;
+                            } else {
+                                files.push(path);
+                            }
+                        }
+                        Ok(())
+                    }
+                    
+                    collect_files_recursive(&directory, &directory, &mut all_files)?;
+                    
+                    println!("📄 Found {} files", all_files.len());
+                    
+                    let start_time = std::time::Instant::now();
+                    let mut entries = Vec::new();
+                    
+                    for (i, file_path) in all_files.iter().enumerate() {
+                        if i % 50 == 0 && i > 0 {
+                            println!("🔄 Processed {} of {} files...", i, all_files.len());
+                        }
+                        
+                        let metadata = std::fs::metadata(file_path)?;
+                        let file_content = std::fs::read(file_path)?;
+                        
+                        // Sign file content
+                        let signature = keypair.sign(&file_content)?;
+                        let signature_hex = hex::encode(&signature);
+                        
+                        // Calculate content hash if requested
+                        let content_hash = if include_hashes {
+                            let mut hasher = Sha3_256::new();
+                            Digest::update(&mut hasher, &file_content);
+                            Some(hex::encode(hasher.finalize()))
+                        } else {
+                            None
+                        };
+                        
+                        let relative_path = file_path.strip_prefix(&directory)
+                            .unwrap_or(file_path);
+                        
+                        entries.push(ManifestEntry {
+                            path: relative_path.display().to_string(),
+                            size: metadata.len(),
+                            modified: metadata.modified()
+                                .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .unwrap_or_default()
+                                .as_secs(),
+                            signature: signature_hex,
+                            content_hash,
+                        });
+                    }
+                    
+                    // Create manifest
+                    let mut manifest = FileManifest {
+                        version: "0.1.0".to_string(),
+                        created_at: std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)?
+                            .as_secs(),
+                        identity_id: hex::encode(&cli_identity.identity.id),
+                        entries,
+                        manifest_signature: String::new(),
+                    };
+                    
+                    // Sign the manifest itself
+                    let manifest_json = serde_json::to_string(&manifest)?;
+                    let manifest_sig = keypair.sign(manifest_json.as_bytes())?;
+                    manifest.manifest_signature = hex::encode(&manifest_sig);
+                    
+                    // Save manifest
+                    let final_json = serde_json::to_string_pretty(&manifest)?;
+                    std::fs::write(&output, final_json)?;
+                    
+                    let elapsed = start_time.elapsed();
+                    
+                    println!("✅ Manifest created successfully!");
+                    println!("📊 Processed {} files in {:.2}s", all_files.len(), elapsed.as_secs_f64());
+                    println!("💾 Manifest saved to: {}", output.display());
+                    println!("🔒 Manifest signature: {}...{}", 
+                        &manifest.manifest_signature[..16],
+                        &manifest.manifest_signature[manifest.manifest_signature.len()-16..]
+                    );
+                    
+                    if include_hashes {
+                        println!("🔍 Content hashes included for integrity verification");
+                    }
                 }
             }
         }

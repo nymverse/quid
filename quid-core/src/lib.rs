@@ -8,9 +8,13 @@ use serde::{Deserialize, Serialize};
 pub mod crypto;
 pub mod error;
 pub mod identity;
+pub mod recovery;
+pub mod security;
 
 pub use error::QuIDError;
 pub use identity::{QuIDIdentity, Extension};
+pub use recovery::{RecoveryCoordinator, RecoveryShare, GuardianInfo};
+pub use security::{SecureMemory, TimingResistance};
 
 /// Result type for QuID operations
 pub type Result<T> = std::result::Result<T, QuIDError>;

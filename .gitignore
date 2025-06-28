@@ -24,3 +24,7 @@ my-identity.json
 identity*.json
 alice*
 *.quid
+recovery-shares
+signatures*
+manifest*
+messages*

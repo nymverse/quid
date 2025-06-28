@@ -76,13 +76,13 @@
   - Add identity creation, listing, and inspection commands
   - Implement secure password prompting with rpassword
 
-- [ ] **Week 10: Core CLI Operations**
+- [x] **Week 10: Core CLI Operations**
   - Implement identity creation with security level selection
   - Add identity listing and detailed inspection
   - Create message signing and verification commands
   - Add extension management commands
 
-- [ ] **Week 11-12: Advanced CLI Features**
+- [x] **Week 11-12: Advanced CLI Features**
   - Implement import/export functionality with encryption
   - Add QR code generation for identity sharing using qr2term
   - Create batch signing capabilities
