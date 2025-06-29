@@ -36,7 +36,14 @@ class SecureEnclaveManager {
     // MARK: - Public Methods
     
     /**
-     * Check if Secure Enclave is available on this device
+     * Check if Secure Enclave is available on this device (instance method)
+     */
+    func isAvailable() -> Bool {
+        return SecureEnclaveManager.isAvailable()
+    }
+    
+    /**
+     * Check if Secure Enclave is available on this device (static method)
      */
     static func isAvailable() -> Bool {
         var error: Unmanaged<CFError>?

@@ -88,13 +88,13 @@
 
 ### 2.3 Mobile Applications
 
-- [ ] **Week 25-26: Mobile Native Libraries**
+- [x] **Week 25-26: Mobile Native Libraries** ✅
   - iOS and Android native library development
   - Hardware security integration (Secure Enclave, TEE)
   - Biometric authentication integration
   - Mobile-specific security considerations
 
-- [ ] **Week 27-28: Flutter/React Native SDKs**
+- [x] **Week 27-28: Flutter/React Native SDKs** ✅
   - Cross-platform mobile development SDKs
   - QR code authentication flows
   - Push notification integration for auth requests

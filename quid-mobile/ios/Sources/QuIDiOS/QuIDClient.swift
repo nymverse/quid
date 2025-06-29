@@ -22,12 +22,12 @@ public class QuIDClient {
     
     // MARK: - Initialization
     
-    public init(config: QuIDConfig = QuIDConfig()) {
+    public init(config: QuIDConfig = QuIDConfig()) throws {
         self.config = config
-        self.secureEnclave = SecureEnclaveManager()
+        self.secureEnclave = try SecureEnclaveManager()
         self.biometricAuth = BiometricAuthManager()
-        self.identityManager = IdentityManager(keychain: KeychainManager())
         self.keychain = KeychainManager()
+        self.identityManager = IdentityManager(keychain: self.keychain)
     }
     
     // MARK: - Public API
