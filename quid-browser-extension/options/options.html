@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QuID Settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-content">
+        <div class="logo">
+          <img src="../icons/icon-48.png" alt="QuID" class="logo-icon">
+          <h1>QuID Universal Authentication</h1>
+        </div>
+        <div class="version">v1.0.0</div>
+      </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="nav-tabs">
+      <button class="nav-tab active" data-tab="general">General</button>
+      <button class="nav-tab" data-tab="identities">Identities</button>
+      <button class="nav-tab" data-tab="security">Security</button>
+      <button class="nav-tab" data-tab="advanced">Advanced</button>
+      <button class="nav-tab" data-tab="about">About</button>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      
+      <!-- General Settings Tab -->
+      <section class="tab-content active" id="general">
+        <h2>General Settings</h2>
+        
+        <div class="settings-group">
+          <h3>Extension Behavior</h3>
+          
+          <div class="setting-item">
+            <label class="setting-label">
+              <input type="checkbox" id="autoDetectLogins" checked>
+              <span class="checkmark"></span>
+              Auto-detect login forms
+            </label>
+            <p class="setting-description">Automatically enhance login forms with QuID authentication</p>
+          </div>
+          
+          <div class="setting-item">
+            <label class="setting-label">
+              <input type="checkbox" id="interceptWebAuthn" checked>
+              <span class="checkmark"></span>
+              Intercept WebAuthn requests
+            </label>
+            <p class="setting-description">Replace native WebAuthn with QuID for better security</p>
+          </div>
+          
+          <div class="setting-item">
+            <label class="setting-label">
+              <input type="checkbox" id="showNotifications" checked>
+              <span class="checkmark"></span>
+              Show notifications
+            </label>
+            <p class="setting-description">Display notifications for authentication requests</p>
+          </div>
+        </div>
+        
+        <div class="settings-group">
+          <h3>Default Behavior</h3>
+          
+          <div class="setting-item">
+            <label for="defaultTimeout">Request timeout (seconds)</label>
+            <input type="number" id="defaultTimeout" value="60" min="10" max="300">
+            <p class="setting-description">How long to wait for authentication responses</p>
+          </div>
+          
+          <div class="setting-item">
+            <label for="defaultUserVerification">Default user verification</label>
+            <select id="defaultUserVerification">
+              <option value="preferred">Preferred</option>
+              <option value="required">Required</option>
+              <option value="discouraged">Discouraged</option>
+            </select>
+            <p class="setting-description">Default level of user verification for authentication</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Identities Tab -->
+      <section class="tab-content" id="identities">
+        <h2>QuID Identities</h2>
+        
+        <div class="identities-header">
+          <div class="identities-stats">
+            <div class="stat-card">
+              <div class="stat-number" id="totalIdentities">0</div>
+              <div class="stat-label">Total Identities</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-number" id="activeIdentities">0</div>
+              <div class="stat-label">Active</div>
+            </div>
+          </div>
+          
+          <button class="btn btn-primary" id="createNewIdentity">
+            <span class="icon">➕</span>
+            Create Identity
+          </button>
+        </div>
+        
+        <div class="identities-list" id="identitiesList">
+          <div class="loading-state" id="identitiesLoading">
+            <div class="spinner"></div>
+            <p>Loading identities...</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Security Tab -->
+      <section class="tab-content" id="security">
+        <h2>Security Settings</h2>
+        
+        <div class="settings-group">
+          <h3>Connection Security</h3>
+          
+          <div class="connection-status">
+            <div class="status-indicator" id="connectionStatus">
+              <span class="status-dot"></span>
+              <span class="status-text">Checking connection...</span>
+            </div>
+            <button class="btn btn-secondary" id="testConnection">Test Connection</button>
+          </div>
+          
+          <div class="setting-item">
+            <label class="setting-label">
+              <input type="checkbox" id="requireNativeHost" checked>
+              <span class="checkmark"></span>
+              Require native host connection
+            </label>
+            <p class="setting-description">Disable extension if native host is not available</p>
+          </div>
+        </div>
+        
+        <div class="settings-group">
+          <h3>Privacy Settings</h3>
+          
+          <div class="setting-item">
+            <label class="setting-label">
+              <input type="checkbox" id="clearDataOnExit">
+              <span class="checkmark"></span>
+              Clear temporary data on browser exit
+            </label>
+            <p class="setting-description">Remove cached authentication data when browser closes</p>
+          </div>
+          
+          <div class="setting-item">
+            <label class="setting-label">
+              <input type="checkbox" id="restrictOrigins" checked>
+              <span class="checkmark"></span>
+              Restrict to secure origins only
+            </label>
+            <p class="setting-description">Only allow authentication on HTTPS websites</p>
+          </div>
+        </div>
+        
+        <div class="settings-group">
+          <h3>Security Monitoring</h3>
+          
+          <div class="security-log" id="securityLog">
+            <h4>Recent Security Events</h4>
+            <div class="log-entries">
+              <div class="log-entry">
+                <span class="log-time">2024-01-01 12:00:00</span>
+                <span class="log-message">Extension started</span>
+                <span class="log-level info">INFO</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Advanced Tab -->
+      <section class="tab-content" id="advanced">
+        <h2>Advanced Settings</h2>
+        
+        <div class="settings-group">
+          <h3>Development & Debugging</h3>
+          
+          <div class="setting-item">
+            <label class="setting-label">
+              <input type="checkbox" id="enableDebugLogging">
+              <span class="checkmark"></span>
+              Enable debug logging
+            </label>
+            <p class="setting-description">Log detailed information for troubleshooting</p>
+          </div>
+          
+          <div class="setting-item">
+            <label class="setting-label">
+              <input type="checkbox" id="allowTestOrigins">
+              <span class="checkmark"></span>
+              Allow localhost and test origins
+            </label>
+            <p class="setting-description">Enable QuID on development websites</p>
+          </div>
+        </div>
+        
+        <div class="settings-group">
+          <h3>Extension Data</h3>
+          
+          <div class="data-actions">
+            <button class="btn btn-secondary" id="exportSettings">
+              <span class="icon">📁</span>
+              Export Settings
+            </button>
+            
+            <button class="btn btn-secondary" id="importSettings">
+              <span class="icon">📁</span>
+              Import Settings
+            </button>
+            
+            <button class="btn btn-danger" id="resetSettings">
+              <span class="icon">🗑️</span>
+              Reset to Defaults
+            </button>
+          </div>
+        </div>
+        
+        <div class="settings-group">
+          <h3>Native Host Configuration</h3>
+          
+          <div class="native-host-info">
+            <div class="info-row">
+              <span class="label">Host ID:</span>
+              <span class="value" id="nativeHostId">com.quid.native_host</span>
+            </div>
+            <div class="info-row">
+              <span class="label">Connection:</span>
+              <span class="value" id="nativeHostConnection">Disconnected</span>
+            </div>
+            <div class="info-row">
+              <span class="label">Version:</span>
+              <span class="value" id="nativeHostVersion">Unknown</span>
+            </div>
+          </div>
+          
+          <button class="btn btn-secondary" id="reinstallNativeHost">
+            <span class="icon">🔄</span>
+            Reinstall Native Host
+          </button>
+        </div>
+      </section>
+
+      <!-- About Tab -->
+      <section class="tab-content" id="about">
+        <h2>About QuID</h2>
+        
+        <div class="about-content">
+          <div class="about-section">
+            <h3>QuID Universal Authentication</h3>
+            <p>
+              QuID provides quantum-resistant universal authentication for the modern web.
+              Replace passwords and legacy authentication with secure, quantum-safe credentials.
+            </p>
+          </div>
+          
+          <div class="about-section">
+            <h3>Features</h3>
+            <ul class="feature-list">
+              <li>✅ Quantum-resistant cryptography (ML-DSA)</li>
+              <li>✅ Universal identity across all networks</li>
+              <li>✅ WebAuthn enhancement and replacement</li>
+              <li>✅ Cross-platform compatibility</li>
+              <li>✅ Privacy-first design</li>
+              <li>✅ Open source and auditable</li>
+            </ul>
+          </div>
+          
+          <div class="about-section">
+            <h3>System Information</h3>
+            <div class="system-info">
+              <div class="info-row">
+                <span class="label">Extension Version:</span>
+                <span class="value" id="extensionVersion">1.0.0</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Browser:</span>
+                <span class="value" id="browserInfo">Chrome 120</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Platform:</span>
+                <span class="value" id="platformInfo">Linux x86_64</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="about-section">
+            <h3>Links</h3>
+            <div class="link-group">
+              <a href="https://quid.dev" class="external-link" target="_blank">
+                <span class="icon">🌐</span>
+                Official Website
+              </a>
+              <a href="https://github.com/quid-dev/quid" class="external-link" target="_blank">
+                <span class="icon">📂</span>
+                Source Code
+              </a>
+              <a href="https://docs.quid.dev" class="external-link" target="_blank">
+                <span class="icon">📚</span>
+                Documentation
+              </a>
+              <a href="https://quid.dev/support" class="external-link" target="_blank">
+                <span class="icon">💬</span>
+                Support
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Identity Details Modal -->
+  <div class="modal" id="identityModal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="modalTitle">Identity Details</h3>
+        <button class="modal-close" id="closeIdentityModal">&times;</button>
+      </div>
+      
+      <div class="modal-body">
+        <div class="identity-details">
+          <div class="detail-row">
+            <span class="detail-label">Name:</span>
+            <span class="detail-value" id="identityName"></span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">ID:</span>
+            <span class="detail-value" id="identityId"></span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Security Level:</span>
+            <span class="detail-value" id="identitySecurityLevel"></span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Networks:</span>
+            <span class="detail-value" id="identityNetworks"></span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Created:</span>
+            <span class="detail-value" id="identityCreated"></span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Last Used:</span>
+            <span class="detail-value" id="identityLastUsed"></span>
+          </div>
+        </div>
+      </div>
+      
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="editIdentity">Edit</button>
+        <button class="btn btn-danger" id="deleteIdentity">Delete</button>
+        <button class="btn btn-primary" id="exportIdentity">Export</button>
+      </div>
+    </div>
+  </div>
+
+  <input type="file" id="fileInput" style="display: none;" accept=".json">
+  
+  <script src="options.js"></script>
+</body>
+</html>

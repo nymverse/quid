@@ -1,8 +1,8 @@
 //! QuID Command Line Interface
 
 use clap::{Parser, Subcommand};
-use quid_core::{QuIDIdentity, SecurityLevel, RecoveryCoordinator, RecoveryShare, GuardianInfo};
-use secrecy::{ExposeSecret, Secret};
+use quid_core::{QuIDIdentity, SecurityLevel, RecoveryCoordinator, RecoveryShare, GuardianInfo, IdentityStorage, StorageConfig};
+use secrecy::{ExposeSecret, Secret, SecretString};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use sha3::{Digest, Sha3_256, Shake256};
@@ -107,6 +107,11 @@ enum Commands {
     },
     /// List supported network adapters
     Adapters,
+    /// Manage encrypted identity storage
+    Storage {
+        #[command(subcommand)]
+        storage_command: StorageCommands,
+    },
     Recovery {
         #[command(subcommand)]
         recovery_command: RecoveryCommands,
@@ -118,6 +123,76 @@ enum Commands {
     
 }
 
+
+#[derive(Subcommand)]
+enum StorageCommands {
+    /// Store identity in encrypted storage
+    Store {
+        /// Identity file to store
+        identity: PathBuf,
+        /// Storage directory (optional)
+        #[arg(short, long)]
+        storage_dir: Option<PathBuf>,
+    },
+    /// Load identity from encrypted storage
+    Load {
+        /// Identity ID (hex-encoded)
+        identity_id: String,
+        /// Output file for loaded identity
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Storage directory (optional)
+        #[arg(short, long)]
+        storage_dir: Option<PathBuf>,
+    },
+    /// List identities in encrypted storage
+    ListStored {
+        /// Storage directory (optional)
+        #[arg(short, long)]
+        storage_dir: Option<PathBuf>,
+    },
+    /// Create backup of stored identity
+    Backup {
+        /// Identity ID (hex-encoded)
+        identity_id: String,
+        /// Backup hint/description
+        #[arg(short = 'H', long)]
+        hint: Option<String>,
+        /// Storage directory (optional)
+        #[arg(short, long)]
+        storage_dir: Option<PathBuf>,
+    },
+    /// List backups for an identity
+    ListBackups {
+        /// Identity ID (hex-encoded)
+        identity_id: String,
+        /// Storage directory (optional)
+        #[arg(short, long)]
+        storage_dir: Option<PathBuf>,
+    },
+    /// Restore identity from backup
+    RestoreBackup {
+        /// Path to backup file
+        backup_file: PathBuf,
+        /// Output file for restored identity
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Storage directory (optional)
+        #[arg(short, long)]
+        storage_dir: Option<PathBuf>,
+    },
+    /// Delete identity from encrypted storage
+    Delete {
+        /// Identity ID (hex-encoded)
+        identity_id: String,
+        /// Storage directory (optional)
+        #[arg(short, long)]
+        storage_dir: Option<PathBuf>,
+        /// Skip confirmation prompt
+        #[arg(long)]
+        force: bool,
+    },
+}
 
 #[derive(Subcommand)]
 enum RecoveryCommands {
@@ -773,6 +848,255 @@ fn main() -> anyhow::Result<()> {
                     println!("✅ Plain identity imported to: {}", output.display());
                 } else {
                     return Err(anyhow::anyhow!("❌ Invalid backup file format"));
+                }
+            }
+        }
+
+        Commands::Storage { storage_command } => {
+            match storage_command {
+                StorageCommands::Store { identity, storage_dir } => {
+                    // Load identity file
+                    let content = std::fs::read_to_string(&identity)?;
+                    let cli_identity: CliIdentity = serde_json::from_str(&content)?;
+                    let keypair = cli_identity.to_keypair()?;
+                    
+                    // Set up storage
+                    let storage_path = storage_dir.unwrap_or_else(|| PathBuf::from(".quid-storage"));
+                    let config = StorageConfig {
+                        storage_path,
+                        kdf_iterations: 100_000,
+                        auto_backup: true,
+                        max_backups: 5,
+                    };
+                    let mut storage = IdentityStorage::new(config.clone())?;
+                    
+                    println!("🔐 Storing identity in encrypted storage...");
+                    println!("🆔 Identity: {}...{}", 
+                        &hex::encode(&cli_identity.identity.id)[..16],
+                        &hex::encode(&cli_identity.identity.id)[48..]
+                    );
+                    
+                    // Get password for encryption
+                    let password = SecretString::new(rpassword::prompt_password("Enter password for encrypted storage: ")?);
+                    
+                    // Store identity
+                    storage.store_identity(&cli_identity.identity, &keypair, &password)?;
+                    
+                    println!("✅ Identity stored successfully!");
+                    println!("📁 Storage directory: {}", config.storage_path.display());
+                    println!("🔒 Identity encrypted with your password");
+                }
+                
+                StorageCommands::Load { identity_id, output, storage_dir } => {
+                    // Set up storage
+                    let storage_path = storage_dir.unwrap_or_else(|| PathBuf::from(".quid-storage"));
+                    let config = StorageConfig {
+                        storage_path,
+                        kdf_iterations: 100_000,
+                        auto_backup: true,
+                        max_backups: 5,
+                    };
+                    let mut storage = IdentityStorage::new(config)?;
+                    
+                    // Parse identity ID
+                    let id_bytes = hex::decode(&identity_id)?;
+                    
+                    println!("🔓 Loading identity from encrypted storage...");
+                    println!("🆔 Identity ID: {}...{}", 
+                        &identity_id[..16],
+                        &identity_id[identity_id.len()-16..]
+                    );
+                    
+                    // Get password
+                    let password = SecretString::new(rpassword::prompt_password("Enter storage password: ")?);
+                    
+                    // Load identity
+                    let (identity, keypair) = storage.load_identity(&id_bytes, &password)?;
+                    
+                    // Convert to CLI format and save
+                    let cli_identity = CliIdentity::from_identity_and_keypair(identity, &keypair);
+                    let json = serde_json::to_string_pretty(&cli_identity)?;
+                    std::fs::write(&output, json)?;
+                    
+                    println!("✅ Identity loaded successfully!");
+                    println!("📄 Saved to: {}", output.display());
+                }
+                
+                StorageCommands::ListStored { storage_dir } => {
+                    // Set up storage
+                    let storage_path = storage_dir.unwrap_or_else(|| PathBuf::from(".quid-storage"));
+                    let config = StorageConfig {
+                        storage_path: storage_path.clone(),
+                        kdf_iterations: 100_000,
+                        auto_backup: true,
+                        max_backups: 5,
+                    };
+                    let storage = IdentityStorage::new(config)?;
+                    
+                    println!("📋 Identities in encrypted storage");
+                    println!("📁 Storage directory: {}", storage_path.display());
+                    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                    
+                    let identities = storage.list_identities()?;
+                    
+                    if identities.is_empty() {
+                        println!("❌ No identities found in encrypted storage");
+                        println!("💡 Use 'quid storage store <identity.json>' to store one");
+                    } else {
+                        for (i, id) in identities.iter().enumerate() {
+                            let id_hex = hex::encode(id);
+                            println!("{}. 🆔 {}...{}", 
+                                i + 1,
+                                &id_hex[..16],
+                                &id_hex[id_hex.len()-16..]
+                            );
+                            println!("   🔒 Encrypted storage file: {}.quid", &id_hex[..16]);
+                        }
+                        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                        println!("💡 Use 'quid storage load <identity_id>' to load an identity");
+                    }
+                }
+                
+                StorageCommands::Backup { identity_id, hint, storage_dir } => {
+                    // Set up storage
+                    let storage_path = storage_dir.unwrap_or_else(|| PathBuf::from(".quid-storage"));
+                    let config = StorageConfig {
+                        storage_path,
+                        kdf_iterations: 100_000,
+                        auto_backup: true,
+                        max_backups: 5,
+                    };
+                    let storage = IdentityStorage::new(config)?;
+                    
+                    // Parse identity ID
+                    let id_bytes = hex::decode(&identity_id)?;
+                    
+                    println!("💾 Creating backup of stored identity...");
+                    println!("🆔 Identity ID: {}...{}", 
+                        &identity_id[..16],
+                        &identity_id[identity_id.len()-16..]
+                    );
+                    
+                    // Create backup
+                    let backup_path = storage.backup_identity(&id_bytes, hint.clone())?;
+                    
+                    println!("✅ Backup created successfully!");
+                    println!("📄 Backup file: {}", backup_path.display());
+                    
+                    if let Some(hint_text) = hint {
+                        println!("💡 Hint: {}", hint_text);
+                    }
+                }
+                
+                StorageCommands::ListBackups { identity_id, storage_dir } => {
+                    // Set up storage
+                    let storage_path = storage_dir.unwrap_or_else(|| PathBuf::from(".quid-storage"));
+                    let config = StorageConfig {
+                        storage_path,
+                        kdf_iterations: 100_000,
+                        auto_backup: true,
+                        max_backups: 5,
+                    };
+                    let storage = IdentityStorage::new(config)?;
+                    
+                    // Parse identity ID
+                    let id_bytes = hex::decode(&identity_id)?;
+                    
+                    println!("📋 Backups for identity");
+                    println!("🆔 Identity ID: {}...{}", 
+                        &identity_id[..16],
+                        &identity_id[identity_id.len()-16..]
+                    );
+                    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                    
+                    let backups = storage.list_backups(&id_bytes)?;
+                    
+                    if backups.is_empty() {
+                        println!("❌ No backups found for this identity");
+                        println!("💡 Use 'quid storage backup <identity_id>' to create one");
+                    } else {
+                        for (i, backup_path) in backups.iter().enumerate() {
+                            println!("{}. 📄 {}", i + 1, backup_path.display());
+                            
+                            if let Ok(metadata) = std::fs::metadata(backup_path) {
+                                if let Ok(modified) = metadata.modified() {
+                                    println!("   📅 Created: {:?}", modified);
+                                }
+                                println!("   📊 Size: {} bytes", metadata.len());
+                            }
+                        }
+                        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                        println!("💡 Use 'quid storage restore-backup <backup_file>' to restore");
+                    }
+                }
+                
+                StorageCommands::RestoreBackup { backup_file, output, storage_dir } => {
+                    // Set up storage
+                    let storage_path = storage_dir.unwrap_or_else(|| PathBuf::from(".quid-storage"));
+                    let config = StorageConfig {
+                        storage_path,
+                        kdf_iterations: 100_000,
+                        auto_backup: true,
+                        max_backups: 5,
+                    };
+                    let mut storage = IdentityStorage::new(config)?;
+                    
+                    println!("🔄 Restoring identity from backup...");
+                    println!("📄 Backup file: {}", backup_file.display());
+                    
+                    // Get password
+                    let password = SecretString::new(rpassword::prompt_password("Enter storage password: ")?);
+                    
+                    // Restore from backup
+                    let (identity, keypair) = storage.restore_from_backup(&backup_file, &password)?;
+                    
+                    // Convert to CLI format and save
+                    let cli_identity = CliIdentity::from_identity_and_keypair(identity, &keypair);
+                    let json = serde_json::to_string_pretty(&cli_identity)?;
+                    std::fs::write(&output, json)?;
+                    
+                    println!("✅ Identity restored successfully!");
+                    println!("🆔 Identity ID: {}", hex::encode(&cli_identity.identity.id));
+                    println!("📄 Saved to: {}", output.display());
+                }
+                
+                StorageCommands::Delete { identity_id, storage_dir, force } => {
+                    // Set up storage
+                    let storage_path = storage_dir.unwrap_or_else(|| PathBuf::from(".quid-storage"));
+                    let config = StorageConfig {
+                        storage_path,
+                        kdf_iterations: 100_000,
+                        auto_backup: true,
+                        max_backups: 5,
+                    };
+                    let mut storage = IdentityStorage::new(config)?;
+                    
+                    // Parse identity ID
+                    let id_bytes = hex::decode(&identity_id)?;
+                    
+                    println!("🗑️  Deleting identity from encrypted storage...");
+                    println!("🆔 Identity ID: {}...{}", 
+                        &identity_id[..16],
+                        &identity_id[identity_id.len()-16..]
+                    );
+                    
+                    if !force {
+                        print!("⚠️  Are you sure? This cannot be undone! (y/N): ");
+                        std::io::Write::flush(&mut std::io::stdout())?;
+                        let mut confirmation = String::new();
+                        std::io::stdin().read_line(&mut confirmation)?;
+                        
+                        if confirmation.trim().to_lowercase() != "y" {
+                            println!("❌ Deletion cancelled");
+                            return Ok(());
+                        }
+                    }
+                    
+                    // Delete identity
+                    storage.delete_identity(&id_bytes)?;
+                    
+                    println!("✅ Identity deleted successfully!");
+                    println!("💡 Backups (if any) are preserved");
                 }
             }
         }

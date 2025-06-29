@@ -1,0 +1,67 @@
+{
+  "name": "quid-browser-extension",
+  "version": "1.0.0",
+  "description": "QuID Universal Authentication Browser Extension",
+  "main": "src/background.js",
+  "scripts": {
+    "test": "jest tests/browser_extension_tests.js",
+    "test:watch": "jest tests/browser_extension_tests.js --watch",
+    "test:coverage": "jest tests/browser_extension_tests.js --coverage",
+    "build": "node scripts/build.js",
+    "build:chrome": "node scripts/build.js chrome",
+    "build:firefox": "node scripts/build.js firefox",
+    "lint": "eslint src/ tests/",
+    "lint:fix": "eslint src/ tests/ --fix",
+    "package": "npm run build && zip -r quid-extension.zip dist/",
+    "dev": "npm run build && npm run test"
+  },
+  "keywords": [
+    "authentication",
+    "quantum-resistant",
+    "webauthn",
+    "browser-extension",
+    "security"
+  ],
+  "author": "QuID Team",
+  "license": "MIT",
+  "devDependencies": {
+    "jest": "^29.0.0",
+    "eslint": "^8.0.0",
+    "fs-extra": "^11.0.0"
+  },
+  "jest": {
+    "testEnvironment": "jsdom",
+    "setupFiles": ["<rootDir>/tests/setup.js"],
+    "collectCoverageFrom": [
+      "src/**/*.js",
+      "!src/**/*.test.js"
+    ],
+    "coverageReporters": [
+      "text",
+      "lcov",
+      "html"
+    ]
+  },
+  "eslintConfig": {
+    "env": {
+      "browser": true,
+      "es2021": true,
+      "jest": true,
+      "webextensions": true
+    },
+    "extends": "eslint:recommended",
+    "parserOptions": {
+      "ecmaVersion": 12,
+      "sourceType": "module"
+    },
+    "globals": {
+      "chrome": "readonly"
+    },
+    "rules": {
+      "no-unused-vars": "warn",
+      "no-console": "off",
+      "prefer-const": "error",
+      "no-var": "error"
+    }
+  }
+}

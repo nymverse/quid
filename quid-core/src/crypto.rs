@@ -5,6 +5,7 @@
 
 use crate::{Result, SecurityLevel};
 use secrecy::{ExposeSecret, Secret};
+use serde::{Deserialize, Serialize, Deserializer, Serializer};
 use sha3::Shake256;
 use sha3::digest::{Update, ExtendableOutput, XofReader};
 use std::fmt;
@@ -41,6 +42,41 @@ impl Clone for KeyPair {
 impl Drop for KeyPair {
     fn drop(&mut self) {
         // The Secret<Vec<u8>> will handle secure deletion automatically
+    }
+}
+
+impl Serialize for KeyPair {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("KeyPair", 3)?;
+        state.serialize_field("public_key", &self.public_key)?;
+        state.serialize_field("private_key", self.private_key.expose_secret())?;
+        state.serialize_field("security_level", &self.security_level)?;
+        state.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for KeyPair {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct KeyPairData {
+            public_key: Vec<u8>,
+            private_key: Vec<u8>,
+            security_level: SecurityLevel,
+        }
+        
+        let data = KeyPairData::deserialize(deserializer)?;
+        Ok(KeyPair {
+            public_key: data.public_key,
+            private_key: Secret::new(data.private_key),
+            security_level: data.security_level,
+        })
     }
 }
 

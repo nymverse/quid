@@ -1,0 +1,64 @@
+[package]
+name = "quid-desktop"
+version = "0.1.0"
+edition = "2021"
+description = "Cross-platform desktop integration for QuID"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+quid-core = { path = "../quid-core" }
+quid-extensions = { path = "../quid-extensions" }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Security
+secrecy = { workspace = true }
+
+# Async
+tokio = { workspace = true }
+async-trait = "0.1"
+
+# Cross-platform desktop
+dirs = "5.0"
+notify-rust = { version = "4.0", optional = true }
+keyring = { version = "2.0", optional = true }
+
+# Additional dependencies
+rand = { workspace = true }
+hex = { workspace = true }
+sha3 = { workspace = true }
+libc = "0.2"
+
+# System integration
+windows = { version = "0.52", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Registry",
+    "Win32_UI_Shell",
+], optional = true }
+
+# Platform-specific features
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = "0.9"
+security-framework = "2.0"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+dbus = { version = "0.9", optional = true }
+freedesktop-desktop-entry = { version = "0.5", optional = true }
+
+[features]
+default = ["notifications", "system-keychain"]
+windows-integration = ["windows"]
+linux-integration = ["dbus", "freedesktop-desktop-entry"]
+notifications = ["notify-rust"]
+system-keychain = ["keyring"]
+
+[dev-dependencies]
+tokio-test = "0.4"
+tempfile = "3.8"

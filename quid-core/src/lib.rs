@@ -10,11 +10,13 @@ pub mod error;
 pub mod identity;
 pub mod recovery;
 pub mod security;
+pub mod storage;
 
 pub use error::QuIDError;
 pub use identity::{QuIDIdentity, Extension};
 pub use recovery::{RecoveryCoordinator, RecoveryShare, GuardianInfo};
 pub use security::{SecureMemory, TimingResistance};
+pub use storage::{IdentityStorage, StorageConfig, EncryptedIdentity};
 
 /// Result type for QuID operations
 pub type Result<T> = std::result::Result<T, QuIDError>;

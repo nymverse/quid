@@ -21,4 +21,7 @@ pub enum QuIDError {
     
     #[error("Invalid security level")]
     InvalidSecurityLevel,
+    
+    #[error("Storage error: {0}")]
+    StorageError(String),
 }
