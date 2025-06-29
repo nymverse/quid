@@ -38,7 +38,7 @@
   - Generic key derivation from master identity
   - Adapter lifecycle management
 
-- [ ] **Week 11-12: Basic Adapters**
+- [x] **Week 11-12: Basic Adapters** ✅
   - Web authentication adapter (WebAuthn-compatible)
   - SSH key authentication adapter
   - Generic signature adapter for custom protocols

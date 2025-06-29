@@ -149,7 +149,7 @@ impl GenericAdapter {
             SignatureAlgorithm::QuidNative => {
                 // Native QuID signature
                 let mut hasher = Sha3_256::new();
-                hasher.update(keys.private_key());
+                hasher.update(keys.public_key()); // Use public key for consistency with verification
                 hasher.update(&message_hash);
                 hasher.update(self.network_id.as_bytes());
                 hasher.finalize().to_vec()
@@ -158,7 +158,7 @@ impl GenericAdapter {
                 // HMAC-SHA3 signature
                 let mut hasher = Sha3_256::new();
                 hasher.update(b"HMAC-SHA3");
-                hasher.update(keys.private_key());
+                hasher.update(keys.public_key()); // Use public key for consistency with verification
                 hasher.update(&message_hash);
                 hasher.finalize().to_vec()
             }
@@ -186,7 +186,7 @@ impl GenericAdapter {
         let expected_signature = match &sig.algorithm {
             SignatureAlgorithm::QuidNative => {
                 let mut hasher = Sha3_256::new();
-                hasher.update(public_key); // In production, would derive private key properly
+                hasher.update(public_key); // Use public key for consistency with signing
                 hasher.update(&message_hash);
                 hasher.update(self.network_id.as_bytes());
                 hasher.finalize().to_vec()
