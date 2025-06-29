@@ -1,0 +1,8 @@
+<!-- SVG Placeholder for 16x16 icon -->
+
+    <svg width="16" height="16" xmlns="http://www.w3.org/2000/svg">
+      <rect width="16" height="16" fill="#667eea" rx="4"/>
+      <text x="50%" y="50%" text-anchor="middle" dy="0.3em" 
+            fill="white" font-family="Arial" font-size="6.4" font-weight="bold">Q</text>
+    </svg>
+  

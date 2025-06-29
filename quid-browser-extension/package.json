@@ -4,9 +4,9 @@
   "description": "QuID Universal Authentication Browser Extension",
   "main": "src/background.js",
   "scripts": {
-    "test": "jest tests/browser_extension_tests.js",
-    "test:watch": "jest tests/browser_extension_tests.js --watch",
-    "test:coverage": "jest tests/browser_extension_tests.js --coverage",
+    "test": "jest tests/browser_extension.test.js",
+    "test:watch": "jest tests/browser_extension.test.js --watch",
+    "test:coverage": "jest tests/browser_extension.test.js --coverage",
     "build": "node scripts/build.js",
     "build:chrome": "node scripts/build.js chrome",
     "build:firefox": "node scripts/build.js firefox",
@@ -25,13 +25,16 @@
   "author": "QuID Team",
   "license": "MIT",
   "devDependencies": {
-    "jest": "^29.0.0",
     "eslint": "^8.0.0",
-    "fs-extra": "^11.0.0"
+    "fs-extra": "^11.0.0",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^30.0.2"
   },
   "jest": {
     "testEnvironment": "jsdom",
-    "setupFiles": ["<rootDir>/tests/setup.js"],
+    "setupFiles": [
+      "<rootDir>/tests/setup.js"
+    ],
     "collectCoverageFrom": [
       "src/**/*.js",
       "!src/**/*.test.js"
@@ -47,15 +50,20 @@
       "browser": true,
       "es2021": true,
       "jest": true,
-      "webextensions": true
+      "webextensions": true,
+      "node": true
     },
     "extends": "eslint:recommended",
     "parserOptions": {
       "ecmaVersion": 12,
-      "sourceType": "module"
+      "sourceType": "script"
     },
     "globals": {
-      "chrome": "readonly"
+      "chrome": "readonly",
+      "importScripts": "readonly",
+      "SecurityPolicy": "readonly",
+      "global": "writable",
+      "module": "readonly"
     },
     "rules": {
       "no-unused-vars": "warn",

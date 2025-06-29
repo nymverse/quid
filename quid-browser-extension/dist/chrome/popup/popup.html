@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QuID Universal Authentication</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <!-- Header -->
+    <header class="popup-header">
+      <div class="logo">
+        <img src="../icons/icon-48.png" alt="QuID" class="logo-icon">
+        <h1>QuID</h1>
+      </div>
+      <div class="status-indicator" id="statusIndicator">
+        <span class="status-dot"></span>
+        <span class="status-text">Connecting...</span>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="popup-content">
+      <!-- Connection Status -->
+      <section class="connection-status" id="connectionSection">
+        <div class="status-card">
+          <h3>Extension Status</h3>
+          <div class="status-details">
+            <div class="detail-row">
+              <span>Native Host:</span>
+              <span id="nativeHostStatus" class="status-value">Checking...</span>
+            </div>
+            <div class="detail-row">
+              <span>Identities:</span>
+              <span id="identityCount" class="status-value">0</span>
+            </div>
+            <div class="detail-row">
+              <span>Version:</span>
+              <span id="extensionVersion" class="status-value">1.0.0</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Identity Management -->
+      <section class="identity-section" id="identitySection">
+        <div class="section-header">
+          <h3>Your Identities</h3>
+          <button class="btn btn-secondary" id="createIdentityBtn">
+            <span class="icon">➕</span>
+            Create New
+          </button>
+        </div>
+        
+        <div class="identity-list" id="identityList">
+          <div class="empty-state" id="emptyState">
+            <div class="empty-icon">🆔</div>
+            <p>No identities found</p>
+            <p class="empty-subtext">Create your first QuID identity to get started</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Pending Requests -->
+      <section class="requests-section" id="requestsSection" style="display: none;">
+        <div class="section-header">
+          <h3>Pending Requests</h3>
+          <span class="badge" id="requestCount">0</span>
+        </div>
+        
+        <div class="request-list" id="requestList">
+          <!-- Requests will be populated here -->
+        </div>
+      </section>
+
+      <!-- Quick Actions -->
+      <section class="actions-section">
+        <div class="action-buttons">
+          <button class="btn btn-primary" id="openOptionsBtn">
+            <span class="icon">⚙️</span>
+            Settings
+          </button>
+          <button class="btn btn-secondary" id="refreshBtn">
+            <span class="icon">🔄</span>
+            Refresh
+          </button>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="popup-footer">
+      <div class="footer-links">
+        <a href="#" id="helpLink">Help</a>
+        <a href="#" id="aboutLink">About</a>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Create Identity Modal -->
+  <div class="modal" id="createIdentityModal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Create New Identity</h3>
+        <button class="modal-close" id="closeModalBtn">&times;</button>
+      </div>
+      
+      <form class="modal-body" id="createIdentityForm">
+        <div class="form-group">
+          <label for="identityName">Identity Name</label>
+          <input type="text" id="identityName" placeholder="e.g., Personal, Work, Gaming" required>
+        </div>
+        
+        <div class="form-group">
+          <label for="securityLevel">Security Level</label>
+          <select id="securityLevel">
+            <option value="Level1">Level 1 (Standard)</option>
+            <option value="Level2">Level 2 (Enhanced)</option>
+            <option value="Level3">Level 3 (Maximum)</option>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label>Networks</label>
+          <div class="checkbox-group">
+            <label class="checkbox-label">
+              <input type="checkbox" value="web" checked>
+              <span>Web Authentication</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" value="ssh">
+              <span>SSH Keys</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" value="bitcoin">
+              <span>Bitcoin</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" value="ethereum">
+              <span>Ethereum</span>
+            </label>
+          </div>
+        </div>
+      </form>
+      
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="cancelCreateBtn">Cancel</button>
+        <button type="submit" form="createIdentityForm" class="btn btn-primary" id="confirmCreateBtn">
+          <span class="icon">🔐</span>
+          Create Identity
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

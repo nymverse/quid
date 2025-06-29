@@ -28,3 +28,7 @@ recovery-shares
 signatures*
 manifest*
 messages*
+
+
+node_modules
+

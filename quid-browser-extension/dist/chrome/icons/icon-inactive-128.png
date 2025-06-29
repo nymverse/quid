@@ -1,0 +1,8 @@
+<!-- SVG Placeholder for 128x128 icon -->
+
+    <svg width="128" height="128" xmlns="http://www.w3.org/2000/svg">
+      <rect width="128" height="128" fill="#667eea" rx="4"/>
+      <text x="50%" y="50%" text-anchor="middle" dy="0.3em" 
+            fill="white" font-family="Arial" font-size="51.2" font-weight="bold">Q</text>
+    </svg>
+  

@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QuID JavaScript SDK - Vanilla JS Example</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .section {
+            margin: 30px 0;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+        }
+        
+        .section h2 {
+            margin-top: 0;
+            color: #667eea;
+        }
+        
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        
+        .status.success { background: #d4edda; color: #155724; }
+        .status.error { background: #f8d7da; color: #721c24; }
+        .status.info { background: #d1ecf1; color: #0c5460; }
+        
+        button {
+            margin: 5px;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .identity-list {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            padding: 10px;
+        }
+        
+        .identity-item {
+            padding: 8px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        pre {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 QuID JavaScript SDK Demo</h1>
+        
+        <div class="section">
+            <h2>Authentication Status</h2>
+            <div id="status" class="status info">Initializing QuID SDK...</div>
+            <button id="checkStatus" class="btn-secondary">Check Status</button>
+        </div>
+
+        <div class="section">
+            <h2>QuID Signin Button</h2>
+            <p>This demonstrates the easy-to-use signin button component:</p>
+            <div id="signin-container"></div>
+            <div id="auth-result"></div>
+        </div>
+
+        <div class="section">
+            <h2>Manual Authentication</h2>
+            <p>Test manual authentication with custom parameters:</p>
+            <button id="manualAuth" class="btn-primary">Authenticate</button>
+            <button id="webauthnFallback" class="btn-secondary">Test WebAuthn Fallback</button>
+            <div id="manual-result"></div>
+        </div>
+
+        <div class="section">
+            <h2>Identity Management</h2>
+            <p>Manage your QuID identities:</p>
+            <button id="listIdentities" class="btn-primary">List Identities</button>
+            <button id="createIdentity" class="btn-primary">Create Identity</button>
+            <div id="identities" class="identity-list"></div>
+        </div>
+
+        <div class="section">
+            <h2>OAuth Integration</h2>
+            <p>Demonstrate OAuth/OIDC integration:</p>
+            <button id="oauthExample" class="btn-primary">Start OAuth Flow</button>
+            <div id="oauth-result"></div>
+        </div>
+
+        <div class="section">
+            <h2>Debug Information</h2>
+            <button id="toggleDebug" class="btn-secondary">Toggle Debug Logging</button>
+            <pre id="debug-log"></pre>
+        </div>
+    </div>
+
+    <!-- Include QuID SDK (in production, use CDN or npm package) -->
+    <script type="module">
+        // Import QuID SDK (adjust path as needed)
+        import { 
+            QuIDClient, 
+            createSigninButton, 
+            QuIDOAuthClient 
+        } from '../dist/index.esm.js';
+
+        let quidClient;
+        let debugEnabled = false;
+        const debugLog = document.getElementById('debug-log');
+
+        function log(message, type = 'info') {
+            console.log(`[QuID Demo] ${message}`);
+            if (debugEnabled) {
+                const timestamp = new Date().toLocaleTimeString();
+                debugLog.textContent += `[${timestamp}] ${message}\n`;
+                debugLog.scrollTop = debugLog.scrollHeight;
+            }
+        }
+
+        function updateStatus(message, type = 'info') {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+            statusEl.className = `status ${type}`;
+        }
+
+        function showResult(elementId, result, isError = false) {
+            const element = document.getElementById(elementId);
+            element.innerHTML = `
+                <div class="status ${isError ? 'error' : 'success'}">
+                    <strong>${isError ? 'Error' : 'Success'}:</strong>
+                    <pre>${JSON.stringify(result, null, 2)}</pre>
+                </div>
+            `;
+        }
+
+        async function initializeQuID() {
+            try {
+                log('Initializing QuID client...');
+                quidClient = new QuIDClient({ debug: debugEnabled });
+
+                // Listen for events
+                quidClient.on((event) => {
+                    log(`QuID Event: ${event.type}`, 'info');
+                    
+                    switch (event.type) {
+                        case 'ready':
+                            updateStatus('QuID SDK is ready!', 'success');
+                            break;
+                        case 'extension-connected':
+                            updateStatus('QuID browser extension connected', 'success');
+                            break;
+                        case 'extension-disconnected':
+                            updateStatus('QuID browser extension not available - using fallback', 'error');
+                            break;
+                        case 'error':
+                            updateStatus(`Error: ${event.data.message}`, 'error');
+                            break;
+                    }
+                });
+
+                log('QuID client initialized');
+
+            } catch (error) {
+                log(`Failed to initialize QuID: ${error.message}`, 'error');
+                updateStatus(`Initialization failed: ${error.message}`, 'error');
+            }
+        }
+
+        function setupSigninButton() {
+            try {
+                log('Setting up signin button...');
+                
+                const signinButton = createSigninButton('#signin-container', {
+                    buttonText: 'Sign in with QuID 🔐',
+                    style: {
+                        width: '300px',
+                        height: '48px'
+                    },
+                    onSuccess: (response) => {
+                        log('Signin successful!');
+                        showResult('auth-result', response);
+                    },
+                    onError: (error) => {
+                        log(`Signin failed: ${error.message}`, 'error');
+                        showResult('auth-result', { error: error.message }, true);
+                    }
+                });
+
+                log('Signin button created');
+
+            } catch (error) {
+                log(`Failed to create signin button: ${error.message}`, 'error');
+            }
+        }
+
+        // Event Listeners
+        document.getElementById('checkStatus').addEventListener('click', async () => {
+            try {
+                const status = await quidClient.getStatus();
+                showResult('status', status);
+                log('Status check completed');
+            } catch (error) {
+                showResult('status', { error: error.message }, true);
+            }
+        });
+
+        document.getElementById('manualAuth').addEventListener('click', async () => {
+            try {
+                log('Starting manual authentication...');
+                const response = await quidClient.authenticate({
+                    userVerification: 'preferred'
+                });
+                showResult('manual-result', response);
+                log('Manual authentication completed');
+            } catch (error) {
+                log(`Manual authentication failed: ${error.message}`, 'error');
+                showResult('manual-result', { error: error.message }, true);
+            }
+        });
+
+        document.getElementById('webauthnFallback').addEventListener('click', async () => {
+            try {
+                log('Testing WebAuthn fallback...');
+                // Temporarily disconnect extension to test fallback
+                const tempClient = new QuIDClient({ 
+                    enableWebAuthnFallback: true,
+                    debug: debugEnabled 
+                });
+                
+                const response = await tempClient.authenticate();
+                showResult('manual-result', response);
+                log('WebAuthn fallback test completed');
+            } catch (error) {
+                log(`WebAuthn fallback failed: ${error.message}`, 'error');
+                showResult('manual-result', { error: error.message }, true);
+            }
+        });
+
+        document.getElementById('listIdentities').addEventListener('click', async () => {
+            try {
+                log('Listing identities...');
+                const identities = await quidClient.getIdentities();
+                
+                const identitiesEl = document.getElementById('identities');
+                if (identities.length === 0) {
+                    identitiesEl.innerHTML = '<p>No identities found. Create one to get started!</p>';
+                } else {
+                    identitiesEl.innerHTML = identities.map(identity => `
+                        <div class="identity-item">
+                            <strong>${identity.name || identity.id}</strong><br>
+                            <small>ID: ${identity.id}</small><br>
+                            <small>Networks: ${identity.networks.join(', ')}</small><br>
+                            <small>Security: ${identity.securityLevel}</small>
+                        </div>
+                    `).join('');
+                }
+                log(`Found ${identities.length} identities`);
+            } catch (error) {
+                log(`Failed to list identities: ${error.message}`, 'error');
+                document.getElementById('identities').innerHTML = 
+                    `<div class="status error">Error: ${error.message}</div>`;
+            }
+        });
+
+        document.getElementById('createIdentity').addEventListener('click', async () => {
+            try {
+                const name = prompt('Enter identity name:', 'Demo Identity');
+                if (!name) return;
+
+                log('Creating identity...');
+                const identity = await quidClient.createIdentity({
+                    name,
+                    securityLevel: 'Level1',
+                    networks: ['web']
+                });
+                
+                log('Identity created successfully');
+                showResult('identities', identity);
+                
+                // Refresh identity list
+                document.getElementById('listIdentities').click();
+                
+            } catch (error) {
+                log(`Failed to create identity: ${error.message}`, 'error');
+                showResult('identities', { error: error.message }, true);
+            }
+        });
+
+        document.getElementById('oauthExample').addEventListener('click', () => {
+            try {
+                log('Starting OAuth example...');
+                
+                const oauthClient = new QuIDOAuthClient({
+                    clientId: 'demo-client-id',
+                    redirectUri: window.location.origin + '/oauth/callback',
+                    scopes: ['openid', 'profile', 'email'],
+                    provider: {
+                        authorizationEndpoint: 'https://auth.example.com/oauth/authorize',
+                        tokenEndpoint: 'https://auth.example.com/oauth/token'
+                    }
+                }, quidClient);
+
+                const authUrl = oauthClient.generateAuthUrl({
+                    state: 'demo-state-123',
+                    nonce: 'demo-nonce-456'
+                });
+
+                showResult('oauth-result', {
+                    message: 'OAuth flow started',
+                    authUrl: authUrl,
+                    note: 'In a real application, you would redirect to this URL'
+                });
+
+                log('OAuth example completed');
+
+            } catch (error) {
+                log(`OAuth example failed: ${error.message}`, 'error');
+                showResult('oauth-result', { error: error.message }, true);
+            }
+        });
+
+        document.getElementById('toggleDebug').addEventListener('click', () => {
+            debugEnabled = !debugEnabled;
+            document.getElementById('toggleDebug').textContent = 
+                debugEnabled ? 'Disable Debug Logging' : 'Enable Debug Logging';
+            
+            if (quidClient) {
+                quidClient.updateConfig({ debug: debugEnabled });
+            }
+
+            if (!debugEnabled) {
+                debugLog.textContent = '';
+            }
+
+            log(`Debug logging ${debugEnabled ? 'enabled' : 'disabled'}`);
+        });
+
+        // Initialize the demo
+        window.addEventListener('DOMContentLoaded', () => {
+            log('DOM loaded, initializing demo...');
+            initializeQuID();
+            setupSigninButton();
+        });
+    </script>
+</body>
+</html>

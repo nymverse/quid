@@ -74,13 +74,13 @@
 
 ### 2.2 Web Integration
 
-- [ ] **Week 21-22: Browser Extension**
+- [x] **Week 21-22: Browser Extension** ✅
   - Chrome/Firefox extension development
   - WebAuthn API integration and replacement
   - Seamless website authentication flows
   - Security policy enforcement
 
-- [ ] **Week 23-24: JavaScript SDK**
+- [x] **Week 23-24: JavaScript SDK** ✅
   - Comprehensive web development SDK
   - "Sign in with QuID" component library
   - OAuth/OIDC bridge implementation
