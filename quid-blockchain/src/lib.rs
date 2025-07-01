@@ -14,10 +14,10 @@ pub mod utils;
 // Re-export commonly used types
 pub use bitcoin::{BitcoinAdapter, BitcoinAddress, BitcoinTransaction};
 pub use ethereum::{EthereumAdapter, EthereumAddress, EthereumTransaction};
-pub use privacy::{MoneroAdapter, ZcashAdapter, PrivacyTransaction};
-pub use universal::{UniversalBlockchainAdapter, BlockchainNetwork, BlockchainTransaction};
-pub use adapters::{BlockchainAdapter, AdapterRegistry, AdapterError};
-pub use config::{QuIDBlockchainConfig, BlockchainSettings};
+pub use privacy::{MoneroAdapter, ZcashAdapter, PrivacyTransaction, PrivacyConfig};
+pub use universal::{UniversalBlockchainAdapter, BlockchainNetwork, BlockchainTransaction as UniversalTransaction};
+pub use adapters::{BlockchainAdapter, AdapterRegistry, AdapterError, AdapterFactory};
+pub use config::{QuIDBlockchainConfig, BlockchainSettings, CustomBlockchainConfig};
 
 use anyhow::Result;
 use quid_core::{QuIDClient, QuIDIdentity};
