@@ -35,7 +35,7 @@ QuID solves these problems by providing a universal authentication layer that:
 
 #### 3.1 Identity Structure
 
-***
+```
 QuIDIdentity {
    id: SHAKE256(public_key || creation_timestamp)
    master_keypair: {
@@ -55,11 +55,11 @@ NetworkAttachment {
    created_at: Uint64
    signature: ML-DSA-Signature // Signed by master key for integrity
 }
-***
+```
 
 #### 3.2 Authentication API
 
-***
+```
 // Authentication request from any application
 AuthenticationRequest {
    challenge: Bytes
@@ -84,7 +84,7 @@ AuthenticationResponse {
    capabilities: Vec<CapabilityProof>
    timestamp: Uint64
 }
-***
+```
 
 ### 4. Network Integration Patterns
 
@@ -147,7 +147,7 @@ QuID provides universal blockchain authentication through network-specific adapt
 
 #### 5.1 Complete Independence
 
-***
+```
 // Core QuID operation - no network required
 let quid = QuIDClient::new_offline()?;
 let challenge = application.generate_challenge();
@@ -165,7 +165,7 @@ let response = quid.authenticate_offline(AuthenticationRequest {
 
 // Authentication complete - no external dependencies
 application.verify_and_login(response)?;
-***
+```
 
 #### 5.2 Offline Operation Modes
 
@@ -195,7 +195,7 @@ application.verify_and_login(response)?;
 
 #### 6.1 Core Components
 
-***
+```
 QuID System Architecture - Completely Independent:
 
 ┌─────────────────────────────────────────────────────────────┐
@@ -209,7 +209,7 @@ QuID System Architecture - Completely Independent:
 │ Bitcoin │ Ethereum │ Nym │ NomadNet │ Web │ SSH │ Custom   │
 │ Adapter │ Adapter  │ Ada │ Adapter  │ Auth│ Auth│ Networks │
 └─────────────────────────────────────────────────────────────┘
-***
+```
 
 #### 6.2 Authentication Flow
 
@@ -254,7 +254,7 @@ All QuID operations exclusively use NIST-standardized algorithms:
 
 #### 8.1 Desktop Applications
 
-***rust
+```rust
 // Example: Authenticating to a cryptocurrency wallet
 let quid = QuIDClient::new()?;
 let auth_request = AuthenticationRequest {
@@ -283,11 +283,11 @@ let nomadnet_request = AuthenticationRequest {
 
 let nomadnet_response = quid.authenticate(nomadnet_request)?;
 nomadnet.verify_and_login(nomadnet_response)?;
-***
+```
 
 #### 8.2 Web Applications
 
-***javascript
+```javascript
 // Browser integration via QuID extension
 const quid = new QuIDWebClient();
 
@@ -322,11 +322,11 @@ document.getElementById('nomadnet-login').onclick = async () => {
     const response = await quid.authenticate(authRequest);
     nomadnetApp.authenticateUser(response);
 };
-***
+```
 
 #### 8.3 Mobile Applications
 
-***dart
+```dart
 // Flutter/Mobile integration
 class QuIDAuth {
   static Future<AuthenticationResponse> authenticate({
@@ -347,13 +347,13 @@ class QuIDAuth {
     );
   }
 }
-***
+```
 
 ### 9. Network Adapter System
 
 #### 9.1 Adapter Interface
 
-***rust
+```rust
 trait NetworkAdapter {
     fn network_id(&self) -> &str;
     fn generate_keys(&self, master_key: &MLDSAKey) -> Result<NetworkKeys>;
@@ -420,11 +420,11 @@ impl NetworkAdapter for NomadNetAdapter {
         keys.sign_nomadnet_format(challenge)
     }
 }
-***
+```
 
 #### 9.2 Dynamic Adapter Loading
 
-***rust
+```rust
 struct AdapterRegistry {
     adapters: HashMap<String, Box<dyn NetworkAdapter>>,
 }
@@ -474,7 +474,7 @@ fn setup_adapters() -> AdapterRegistry {
     
     registry
 }
-***
+```
 
 ### 10. Deployment Strategies
 
@@ -700,7 +700,7 @@ Recovery Verification Process:
 
 #### 14.1 Nym Ecosystem Integration
 
-***rust
+```rust
 // QuID authenticates to Nym applications, but doesn't depend on Nym
 let nym_wallet_auth = quid.authenticate(AuthenticationRequest {
     challenge: nym_wallet.generate_challenge(),
@@ -721,7 +721,7 @@ let nomadnet_auth = quid.authenticate(AuthenticationRequest {
     },
     timestamp: current_timestamp(),
 })?;
-***
+```
 
 #### 14.2 Cross-Platform Consistency
 
