@@ -1,31 +1,47 @@
 [package]
-name = "quid-ssh"
+name = "quid-tls"
 version = "0.1.0"
 edition = "2021"
 authors = ["Nym Corporation <dev@nymtech.net>"]
 license = "MIT"
-description = "SSH integration for QuID quantum-resistant authentication"
+description = "TLS and PKI integration for QuID quantum-resistant authentication"
 homepage = "https://github.com/nym-corp/quid"
 repository = "https://github.com/nym-corp/quid"
-keywords = ["ssh", "authentication", "quantum-resistant", "security", "quid"]
+keywords = ["tls", "pki", "x509", "quantum-resistant", "quid"]
 categories = ["authentication", "cryptography", "network-programming"]
 
 [dependencies]
 # Core QuID dependencies
 quid-core = { path = "../quid-core" }
 
-# SSH protocol implementation
-russh = "0.38"
-russh-keys = "0.38"
-russh-sftp = "1.0"
+# X.509 and PKI
+x509-parser = "0.15"
+der = "0.7"
+spki = "0.7"
+pkcs8 = "0.10"
+
+# TLS implementation
+rustls = "0.22"
+rustls-webpki = "0.102"
+rustls-pemfile = "2.0"
 
 # Cryptography
+ring = "0.17"
 sha2 = "0.10"
 base64 = "0.20"
 hex = "0.4"
 
+# ASN.1 encoding/decoding
+asn1 = "0.15"
+yasna = "0.5"
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+time = "0.3"
+
 # Async runtime
 tokio = { version = "1.0", features = ["full"] }
+tokio-rustls = "0.25"
 futures = "0.3"
 
 # Error handling and utilities
@@ -39,43 +55,36 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 toml = "0.8"
 
-# Configuration and paths
+# Configuration and CLI
 dirs = "5.0"
 clap = { version = "4.0", features = ["derive"] }
 
-# Time handling
-chrono = { version = "0.4", features = ["serde"] }
-
-# Additional dependencies for the CLI tools
+# Random number generation
 rand = "0.8"
-md5 = "0.7"
 
-# Unix-specific dependencies
-[target.'cfg(unix)'.dependencies]
-nix = "0.27"
+# Additional crypto utilities
+rsa = "0.9"
+p256 = "0.13"
+p384 = "0.13"
 
 [dev-dependencies]
 tempfile = "3.0"
 serial_test = "3.0"
 
 [[bin]]
-name = "quid-ssh-client"
-path = "src/bin/client.rs"
+name = "quid-tls-cert"
+path = "src/bin/cert.rs"
 
 [[bin]]
-name = "quid-ssh-server"
+name = "quid-tls-server"
 path = "src/bin/server.rs"
 
 [[bin]]
-name = "quid-ssh-migrate"
-path = "src/bin/migrate.rs"
-
-[[bin]]
-name = "quid-ssh-ca"
-path = "src/bin/ca.rs"
+name = "quid-tls-client"
+path = "src/bin/client.rs"
 
 [features]
-default = ["client", "server"]
+default = ["client", "server", "cert-gen"]
 client = []
 server = []
-migration = []
+cert-gen = []

@@ -1,0 +1,89 @@
+[package]
+name = "quid-blockchain"
+version = "0.1.0"
+edition = "2021"
+authors = ["Nym Corporation <dev@nymtech.net>"]
+license = "MIT"
+description = "Blockchain integration for QuID quantum-resistant authentication"
+homepage = "https://github.com/nym-corp/quid"
+repository = "https://github.com/nym-corp/quid"
+keywords = ["blockchain", "bitcoin", "ethereum", "quantum-resistant", "quid"]
+categories = ["cryptocurrency", "cryptography", "authentication"]
+
+[dependencies]
+# Core QuID dependencies
+quid-core = { path = "../quid-core" }
+
+# Bitcoin support
+bitcoin = "0.31"
+bitcoincore-rpc = "0.18"
+bip32 = "0.5"
+bip39 = "2.0"
+
+# Ethereum support
+ethers = "2.0"
+web3 = "0.19"
+tiny-keccak = "2.0"
+
+# Privacy coins
+monero = "0.20"
+zcash_primitives = "0.13"
+zcash_proofs = "0.13"
+
+# Generic blockchain support
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+hex = "0.4"
+base58 = "0.2"
+bs58 = "0.5"
+
+# Cryptography
+sha2 = "0.10"
+sha3 = "0.10"
+ripemd = "0.1"
+blake2 = "0.10"
+secp256k1 = { version = "0.28", features = ["rand", "recovery"] }
+ed25519-dalek = "2.0"
+
+# Async and networking
+tokio = { version = "1.0", features = ["full"] }
+reqwest = { version = "0.11", features = ["json"] }
+futures = "0.3"
+
+# Error handling and utilities
+anyhow = "1.0"
+thiserror = "1.0"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+# Time and random
+chrono = { version = "0.4", features = ["serde"] }
+rand = "0.8"
+
+# Configuration and CLI
+dirs = "5.0"
+clap = { version = "4.0", features = ["derive"] }
+toml = "0.8"
+
+[dev-dependencies]
+tempfile = "3.0"
+tokio-test = "0.4"
+
+[[bin]]
+name = "quid-bitcoin"
+path = "src/bin/bitcoin.rs"
+
+[[bin]]
+name = "quid-ethereum"
+path = "src/bin/ethereum.rs"
+
+[[bin]]
+name = "quid-blockchain"
+path = "src/bin/blockchain.rs"
+
+[features]
+default = ["bitcoin", "ethereum", "privacy-coins"]
+bitcoin = []
+ethereum = []
+privacy-coins = []
+universal = []

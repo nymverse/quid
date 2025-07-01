@@ -3,7 +3,9 @@ members = [
     "quid-core",
     "quid-cli",
     "quid-extensions",
-    "quid-desktop"
+    "quid-desktop",
+    "quid-ssh",
+    "quid-tls"
 ]
 resolver = "2"
 
