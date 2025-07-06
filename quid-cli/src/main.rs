@@ -120,6 +120,11 @@ enum Commands {
         #[command(subcommand)]
         batch_command: BatchCommands,
     },
+    /// Multi-wallet security management
+    SecureWallet {
+        #[command(subcommand)]
+        wallet_command: SecureWalletCommands,
+    },
     
 }
 
@@ -271,6 +276,277 @@ enum BatchCommands {
         #[arg(long)]
         include_hashes: bool,
     },
+}
+
+#[derive(Subcommand)]
+enum SecureWalletCommands {
+    /// Create a secure wallet pair (cold storage + hot spending)
+    CreatePair {
+        /// Wallet pair name
+        name: String,
+        /// Security level for both wallets (1, 3, or 5)
+        #[arg(short, long, default_value = "5")]
+        security_level: u8,
+        /// Network type (bitcoin, ethereum, etc.)
+        #[arg(short, long, default_value = "bitcoin")]
+        network: String,
+        /// Cold wallet storage directory
+        #[arg(long)]
+        cold_storage: Option<PathBuf>,
+        /// Hot wallet storage directory  
+        #[arg(long)]
+        hot_storage: Option<PathBuf>,
+        /// Enable hardware security (if available)
+        #[arg(long)]
+        hardware_security: bool,
+    },
+    /// List all secure wallet pairs
+    List,
+    /// Show secure wallet pair details
+    Show {
+        /// Wallet pair name
+        name: String,
+        /// Show addresses and balances
+        #[arg(long)]
+        show_addresses: bool,
+    },
+    /// Generate receiving address (cold wallet)
+    Receive {
+        /// Wallet pair name
+        wallet: String,
+        /// Address derivation path (optional)
+        #[arg(long)]
+        derivation_path: Option<String>,
+        /// Show QR code for address
+        #[arg(long)]
+        qr: bool,
+    },
+    /// Transfer funds from cold to hot wallet
+    Transfer {
+        /// Wallet pair name
+        wallet: String,
+        /// Amount to transfer (in base units)
+        amount: String,
+        /// Transfer policy to apply
+        #[arg(short, long, default_value = "immediate")]
+        policy: String,
+        /// Require additional confirmations
+        #[arg(long)]
+        require_confirmation: bool,
+    },
+    /// Spend from hot wallet
+    Spend {
+        /// Wallet pair name
+        wallet: String,
+        /// Recipient address
+        to: String,
+        /// Amount to spend (in base units)
+        amount: String,
+        /// Transaction fee (optional)
+        #[arg(long)]
+        fee: Option<String>,
+        /// Dry run (don't broadcast)
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Check wallet balances
+    Balance {
+        /// Wallet pair name
+        wallet: String,
+        /// Include pending transactions
+        #[arg(long)]
+        include_pending: bool,
+    },
+    /// Set transfer policy for wallet pair
+    SetPolicy {
+        /// Wallet pair name
+        wallet: String,
+        /// Policy type (immediate, time_delayed, multi_sig, biometric)
+        policy_type: String,
+        /// Policy parameters (JSON string)
+        #[arg(long)]
+        parameters: Option<String>,
+    },
+    /// Add guardian for multi-signature policies
+    AddGuardian {
+        /// Wallet pair name
+        wallet: String,
+        /// Guardian identity file
+        guardian_identity: PathBuf,
+        /// Guardian contact information
+        #[arg(long)]
+        contact: Option<String>,
+    },
+    /// Create recovery backup for wallet pair
+    Backup {
+        /// Wallet pair name
+        wallet: String,
+        /// Output directory for backup files
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Split backup across multiple files
+        #[arg(long)]
+        split_backup: bool,
+    },
+    /// Restore wallet pair from backup
+    Restore {
+        /// Backup file or directory
+        backup: PathBuf,
+        /// Wallet pair name for restored wallet
+        #[arg(short, long)]
+        name: String,
+        /// Verify backup integrity only
+        #[arg(long)]
+        verify_only: bool,
+    },
+    /// Monitor wallet pair for suspicious activity
+    Monitor {
+        /// Wallet pair name
+        wallet: String,
+        /// Enable real-time alerts
+        #[arg(long)]
+        alerts: bool,
+        /// Output format (terminal, log, json)
+        #[arg(short, long, default_value = "terminal")]
+        output: String,
+    },
+    /// Emergency freeze wallet (disable spending)
+    Freeze {
+        /// Wallet pair name
+        wallet: String,
+        /// Reason for freeze
+        #[arg(short, long)]
+        reason: String,
+        /// Require guardian approval to unfreeze
+        #[arg(long)]
+        require_guardian: bool,
+    },
+    /// Unfreeze wallet (re-enable spending)
+    Unfreeze {
+        /// Wallet pair name
+        wallet: String,
+        /// Guardian signatures (if required)
+        #[arg(long)]
+        guardian_signatures: Option<PathBuf>,
+    },
+    /// Delete wallet pair (with confirmation)
+    Delete {
+        /// Wallet pair name
+        wallet: String,
+        /// Skip confirmation prompts
+        #[arg(long)]
+        force: bool,
+        /// Also delete associated backups
+        #[arg(long)]
+        delete_backups: bool,
+    },
+}
+
+/// Secure wallet pair configuration
+#[derive(Serialize, Deserialize, Clone)]
+struct SecureWalletPair {
+    name: String,
+    created_at: u64,
+    network: String,
+    security_level: u8,
+    cold_wallet: WalletInfo,
+    hot_wallet: WalletInfo,
+    transfer_policy: TransferPolicy,
+    guardians: Vec<GuardianInfo>,
+    frozen: bool,
+    freeze_reason: Option<String>,
+    hardware_security: bool,
+}
+
+/// Individual wallet information
+#[derive(Serialize, Deserialize, Clone)]
+struct WalletInfo {
+    identity_id: String,
+    storage_path: PathBuf,
+    derivation_path: Option<String>,
+    last_used: Option<u64>,
+    balance: Option<String>,
+}
+
+/// Transfer policies for secure operations
+#[derive(Serialize, Deserialize, Clone)]
+enum TransferPolicy {
+    /// Immediate transfer (default)
+    Immediate,
+    /// Time-delayed transfer
+    TimeDelayed {
+        delay_seconds: u64,
+        pending_transfers: Vec<PendingTransfer>,
+    },
+    /// Multi-signature required
+    MultiSignature {
+        required_signatures: u32,
+        guardian_ids: Vec<String>,
+    },
+    /// Biometric confirmation required
+    Biometric {
+        biometric_type: String,
+        fallback_policy: Box<TransferPolicy>,
+    },
+    /// Geographic restrictions
+    Geographic {
+        allowed_locations: Vec<String>,
+        fallback_policy: Box<TransferPolicy>,
+    },
+}
+
+/// Pending transfer for time-delayed policies
+#[derive(Serialize, Deserialize, Clone)]
+struct PendingTransfer {
+    transfer_id: String,
+    amount: String,
+    requested_at: u64,
+    execute_at: u64,
+    status: TransferStatus,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+enum TransferStatus {
+    Pending,
+    Approved,
+    Cancelled,
+    Executed,
+}
+
+/// Security monitor for anomaly detection
+#[derive(Serialize, Deserialize, Clone)]
+struct SecurityMonitor {
+    wallet_name: String,
+    enabled: bool,
+    last_activity: Option<u64>,
+    suspicious_events: Vec<SecurityEvent>,
+    alert_thresholds: AlertThresholds,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct SecurityEvent {
+    event_type: String,
+    description: String,
+    timestamp: u64,
+    severity: String,
+    data: std::collections::HashMap<String, String>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct AlertThresholds {
+    max_daily_amount: Option<String>,
+    max_transaction_amount: Option<String>,
+    suspicious_location_change: bool,
+    rapid_succession_limit: Option<u32>,
+}
+
+/// Wallet manager for handling multiple secure wallet pairs
+#[derive(Serialize, Deserialize)]
+struct SecureWalletManager {
+    wallets: std::collections::HashMap<String, SecureWalletPair>,
+    active_wallet: Option<String>,
+    storage_path: PathBuf,
+    monitors: std::collections::HashMap<String, SecurityMonitor>,
 }
 
 /// SHA3-based encrypted backup format
@@ -515,6 +791,27 @@ fn format_timestamp(timestamp: u64) -> String {
             format!("{:?}", datetime)
         }
         None => format!("Invalid timestamp: {}", timestamp)
+    }
+}
+
+/// Helper function to format timestamps for secure wallets
+fn format_wallet_timestamp(timestamp: u64) -> String {
+    let _datetime = std::time::UNIX_EPOCH + std::time::Duration::from_secs(timestamp);
+    let local_time = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    
+    let diff = local_time.saturating_sub(timestamp);
+    
+    if diff < 60 {
+        format!("{} seconds ago", diff)
+    } else if diff < 3600 {
+        format!("{} minutes ago", diff / 60)
+    } else if diff < 86400 {
+        format!("{} hours ago", diff / 3600)
+    } else {
+        format!("{} days ago", diff / 86400)
     }
 }
 
@@ -1818,6 +2115,302 @@ fn main() -> anyhow::Result<()> {
             }
         }
         
+        Commands::SecureWallet { wallet_command } => {
+            match wallet_command {
+                SecureWalletCommands::CreatePair { 
+                    name, 
+                    security_level, 
+                    network, 
+                    cold_storage, 
+                    hot_storage, 
+                    hardware_security 
+                } => {
+                    println!("🏦 Creating secure wallet pair: {}", name);
+                    println!("🔒 Security Level: {}", security_level);
+                    println!("⛓️  Network: {}", network);
+                    
+                    let level = match security_level {
+                        1 => SecurityLevel::Level1,
+                        3 => SecurityLevel::Level3,
+                        5 => SecurityLevel::Level5,
+                        _ => return Err(anyhow::anyhow!("Invalid security level")),
+                    };
+                    
+                    // Create cold wallet (for receiving, never exposed online)
+                    let (cold_identity, cold_keypair) = QuIDIdentity::new(level)?;
+                    println!("❄️  Created cold wallet: {}...{}", 
+                        &hex::encode(&cold_identity.id)[..8],
+                        &hex::encode(&cold_identity.id)[56..]
+                    );
+                    
+                    // Create hot wallet (for spending, limited exposure)
+                    let (hot_identity, hot_keypair) = QuIDIdentity::new(level)?;
+                    println!("🔥 Created hot wallet: {}...{}", 
+                        &hex::encode(&hot_identity.id)[..8],
+                        &hex::encode(&hot_identity.id)[56..]
+                    );
+                    
+                    // Set up storage directories
+                    let default_storage = PathBuf::from(".secure-wallets");
+                    let cold_dir = cold_storage.unwrap_or_else(|| default_storage.join("cold"));
+                    let hot_dir = hot_storage.unwrap_or_else(|| default_storage.join("hot"));
+                    
+                    std::fs::create_dir_all(&cold_dir)?;
+                    std::fs::create_dir_all(&hot_dir)?;
+                    
+                    // Store cold wallet (encrypted)
+                    let cold_cli = CliIdentity::from_identity_and_keypair(cold_identity.clone(), &cold_keypair);
+                    let cold_path = cold_dir.join(format!("{}_cold.json", name));
+                    let cold_json = serde_json::to_string_pretty(&cold_cli)?;
+                    std::fs::write(&cold_path, cold_json)?;
+                    
+                    // Store hot wallet (encrypted)
+                    let hot_cli = CliIdentity::from_identity_and_keypair(hot_identity.clone(), &hot_keypair);
+                    let hot_path = hot_dir.join(format!("{}_hot.json", name));
+                    let hot_json = serde_json::to_string_pretty(&hot_cli)?;
+                    std::fs::write(&hot_path, hot_json)?;
+                    
+                    // Create wallet pair configuration
+                    let wallet_pair = SecureWalletPair {
+                        name: name.clone(),
+                        created_at: std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs(),
+                        network: network.clone(),
+                        security_level,
+                        cold_wallet: WalletInfo {
+                            identity_id: hex::encode(&cold_identity.id),
+                            storage_path: cold_path.clone(),
+                            derivation_path: None,
+                            last_used: None,
+                            balance: None,
+                        },
+                        hot_wallet: WalletInfo {
+                            identity_id: hex::encode(&hot_identity.id),
+                            storage_path: hot_path.clone(),
+                            derivation_path: None,
+                            last_used: None,
+                            balance: None,
+                        },
+                        transfer_policy: TransferPolicy::Immediate,
+                        guardians: Vec::new(),
+                        frozen: false,
+                        freeze_reason: None,
+                        hardware_security,
+                    };
+                    
+                    // Save wallet manager configuration
+                    let manager_path = default_storage.join("wallets.json");
+                    let mut manager = if manager_path.exists() {
+                        let content = std::fs::read_to_string(&manager_path)?;
+                        serde_json::from_str::<SecureWalletManager>(&content)?
+                    } else {
+                        SecureWalletManager {
+                            wallets: std::collections::HashMap::new(),
+                            active_wallet: None,
+                            storage_path: default_storage.clone(),
+                            monitors: std::collections::HashMap::new(),
+                        }
+                    };
+                    
+                    manager.wallets.insert(name.clone(), wallet_pair);
+                    if manager.active_wallet.is_none() {
+                        manager.active_wallet = Some(name.clone());
+                    }
+                    
+                    let manager_json = serde_json::to_string_pretty(&manager)?;
+                    std::fs::write(&manager_path, manager_json)?;
+                    
+                    println!("✅ Secure wallet pair created successfully!");
+                    println!("❄️  Cold wallet: {}", cold_path.display());
+                    println!("🔥 Hot wallet: {}", hot_path.display());
+                    println!("📁 Configuration: {}", manager_path.display());
+                    println!();
+                    println!("💡 Next steps:");
+                    println!("   • Use 'quid secure-wallet receive {}' to get receiving address", name);
+                    println!("   • Use 'quid secure-wallet balance {}' to check balances", name);
+                    println!("   • Use 'quid secure-wallet transfer {} <amount>' to move funds to hot wallet", name);
+                    println!("   • Use 'quid secure-wallet spend {} <address> <amount>' to spend", name);
+                    
+                    if hardware_security {
+                        println!("🔐 Hardware security enabled - use hardware confirmation for transfers");
+                    }
+                }
+                
+                SecureWalletCommands::List => {
+                    let storage_path = PathBuf::from(".secure-wallets");
+                    let manager_path = storage_path.join("wallets.json");
+                    
+                    if !manager_path.exists() {
+                        println!("📭 No secure wallet pairs found");
+                        println!("💡 Create one with: quid secure-wallet create-pair <name>");
+                        return Ok(());
+                    }
+                    
+                    let content = std::fs::read_to_string(&manager_path)?;
+                    let manager: SecureWalletManager = serde_json::from_str(&content)?;
+                    
+                    println!("🏦 Secure Wallet Pairs");
+                    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                    
+                    for (name, wallet) in &manager.wallets {
+                        let status = if wallet.frozen { "🧊 FROZEN" } else { "✅ Active" };
+                        let active = if manager.active_wallet.as_ref() == Some(name) { " [ACTIVE]" } else { "" };
+                        
+                        println!("📱 {} - {} {}{}", name, wallet.network, status, active);
+                        println!("   Created: {}", format_wallet_timestamp(wallet.created_at));
+                        println!("   Security: Level {}", wallet.security_level);
+                        
+                        if wallet.hardware_security {
+                            println!("   🔐 Hardware security enabled");
+                        }
+                        
+                        if !wallet.guardians.is_empty() {
+                            println!("   👥 {} guardians configured", wallet.guardians.len());
+                        }
+                        
+                        match &wallet.transfer_policy {
+                            TransferPolicy::Immediate => println!("   ⚡ Immediate transfers"),
+                            TransferPolicy::TimeDelayed { delay_seconds, .. } => {
+                                println!("   ⏰ Time delayed: {}s", delay_seconds);
+                            }
+                            TransferPolicy::MultiSignature { required_signatures, .. } => {
+                                println!("   ✋ Multi-sig: {} signatures required", required_signatures);
+                            }
+                            _ => println!("   🛡️  Advanced security policy"),
+                        }
+                        println!();
+                    }
+                    
+                    if let Some(active) = &manager.active_wallet {
+                        println!("💡 Active wallet: {}", active);
+                    }
+                }
+                
+                SecureWalletCommands::Show { name, show_addresses } => {
+                    let storage_path = PathBuf::from(".secure-wallets");
+                    let manager_path = storage_path.join("wallets.json");
+                    
+                    if !manager_path.exists() {
+                        return Err(anyhow::anyhow!("No secure wallets found"));
+                    }
+                    
+                    let content = std::fs::read_to_string(&manager_path)?;
+                    let manager: SecureWalletManager = serde_json::from_str(&content)?;
+                    
+                    let wallet = manager.wallets.get(&name)
+                        .ok_or_else(|| anyhow::anyhow!("Wallet '{}' not found", name))?;
+                    
+                    println!("🏦 Secure Wallet Pair: {}", name);
+                    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                    println!("🌐 Network: {}", wallet.network);
+                    println!("🔒 Security Level: {}", wallet.security_level);
+                    println!("📅 Created: {}", format_wallet_timestamp(wallet.created_at));
+                    println!("🧊 Frozen: {}", if wallet.frozen { "Yes" } else { "No" });
+                    
+                    if let Some(reason) = &wallet.freeze_reason {
+                        println!("   Reason: {}", reason);
+                    }
+                    
+                    println!();
+                    println!("❄️  Cold Wallet (Receiving):");
+                    println!("   ID: {}...{}", &wallet.cold_wallet.identity_id[..16], &wallet.cold_wallet.identity_id[48..]);
+                    println!("   Storage: {}", wallet.cold_wallet.storage_path.display());
+                    
+                    if let Some(balance) = &wallet.cold_wallet.balance {
+                        println!("   Balance: {}", balance);
+                    }
+                    
+                    println!();
+                    println!("🔥 Hot Wallet (Spending):");
+                    println!("   ID: {}...{}", &wallet.hot_wallet.identity_id[..16], &wallet.hot_wallet.identity_id[48..]);
+                    println!("   Storage: {}", wallet.hot_wallet.storage_path.display());
+                    
+                    if let Some(balance) = &wallet.hot_wallet.balance {
+                        println!("   Balance: {}", balance);
+                    }
+                    
+                    if let Some(last_used) = wallet.hot_wallet.last_used {
+                        println!("   Last Used: {}", format_wallet_timestamp(last_used));
+                    }
+                    
+                    println!();
+                    println!("🛡️  Transfer Policy:");
+                    match &wallet.transfer_policy {
+                        TransferPolicy::Immediate => {
+                            println!("   ⚡ Immediate transfers (no delay)");
+                        }
+                        TransferPolicy::TimeDelayed { delay_seconds, pending_transfers } => {
+                            println!("   ⏰ Time delayed: {} seconds", delay_seconds);
+                            if !pending_transfers.is_empty() {
+                                println!("   📋 {} pending transfers", pending_transfers.len());
+                            }
+                        }
+                        TransferPolicy::MultiSignature { required_signatures, guardian_ids } => {
+                            println!("   ✋ Multi-signature: {}/{} required", required_signatures, guardian_ids.len());
+                        }
+                        _ => {
+                            println!("   🔐 Advanced security policy active");
+                        }
+                    }
+                    
+                    if !wallet.guardians.is_empty() {
+                        println!();
+                        println!("👥 Guardians ({}):", wallet.guardians.len());
+                        for (i, guardian) in wallet.guardians.iter().enumerate() {
+                            println!("   {}. {} ({})", i + 1, guardian.name, guardian.contact);
+                        }
+                    }
+                    
+                    if show_addresses {
+                        println!();
+                        println!("📍 Addresses:");
+                        println!("   (Address generation requires network adapter)");
+                        println!("   💡 Use 'quid secure-wallet receive {}' to generate addresses", name);
+                    }
+                }
+                
+                SecureWalletCommands::Receive { wallet, derivation_path, qr } => {
+                    println!("📥 Generating receiving address for wallet: {}", wallet);
+                    println!("💡 This would integrate with network adapters to generate addresses");
+                    println!("🔗 Network adapters needed for: {}", wallet);
+                    
+                    if let Some(path) = derivation_path {
+                        println!("🛤️  Derivation path: {}", path);
+                    }
+                    
+                    if qr {
+                        println!("📱 QR code generation would be implemented here");
+                    }
+                    
+                    println!("⚠️  Feature coming soon - requires network adapter integration");
+                }
+                
+                SecureWalletCommands::Balance { wallet, include_pending } => {
+                    println!("💰 Checking balances for wallet: {}", wallet);
+                    println!("💡 This would query blockchain via network adapters");
+                    
+                    if include_pending {
+                        println!("⏳ Including pending transactions");
+                    }
+                    
+                    println!("⚠️  Feature coming soon - requires network adapter integration");
+                }
+                
+                _ => {
+                    println!("⚠️  Command not yet implemented");
+                    println!("🚧 Secure wallet functionality is being built incrementally");
+                    println!("✅ Available commands:");
+                    println!("   • create-pair - Create secure wallet pair");
+                    println!("   • list - List all wallet pairs");
+                    println!("   • show - Show wallet details");
+                    println!("   • receive - Generate receiving address (coming soon)");
+                    println!("   • balance - Check balances (coming soon)");
+                }
+            }
+        }
+
         Commands::Adapters => {
             println!("🔌 Supported Network Adapters");
             println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
