@@ -10,7 +10,8 @@ members = [
     "quid-wallet",
     "quid-exchange",
     "quid-multisig",
-    "quid-nym-adapter"
+    "quid-nym-adapter",
+    "quid-nostr"
 ]
 resolver = "2"
 
