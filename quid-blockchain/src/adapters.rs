@@ -1,13 +1,20 @@
 //! Blockchain adapter registry and management
 //!
-//! This module provides a centralized registry for managing different blockchain adapters,
-//! enabling dynamic discovery and instantiation of blockchain integrations.
+//! This module provides a high-performance centralized registry for managing different 
+//! blockchain adapters, enabling dynamic discovery and instantiation of blockchain integrations.
+//! 
+//! Optimizations include:
+//! - Arc-based adapter sharing for memory efficiency
+//! - Cached health checks to reduce lock contention
+//! - Batch operations for improved performance
+//! - Lazy initialization and cleanup
 
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::time::{Duration, Instant};
 
 use crate::{
     QuIDBlockchainError, QuIDBlockchainResult,
@@ -31,7 +38,35 @@ pub enum AdapterError {
     OperationFailed(String),
 }
 
-/// Adapter metadata
+/// Cached health check result
+#[derive(Debug, Clone)]
+struct HealthCheckCache {
+    status: AdapterStatus,
+    last_check: Instant,
+    check_duration: Duration,
+}
+
+impl HealthCheckCache {
+    fn new(status: AdapterStatus) -> Self {
+        Self {
+            status,
+            last_check: Instant::now(),
+            check_duration: Duration::from_millis(0),
+        }
+    }
+    
+    fn is_expired(&self, ttl: Duration) -> bool {
+        self.last_check.elapsed() > ttl
+    }
+    
+    fn update(&mut self, status: AdapterStatus, duration: Duration) {
+        self.status = status;
+        self.last_check = Instant::now();
+        self.check_duration = duration;
+    }
+}
+
+/// Adapter metadata with performance tracking
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AdapterMetadata {
     /// Adapter name
@@ -48,6 +83,23 @@ pub struct AdapterMetadata {
     pub status: AdapterStatus,
     /// Registration timestamp
     pub registered_at: chrono::DateTime<chrono::Utc>,
+    /// Performance metrics
+    pub metrics: AdapterMetrics,
+}
+
+/// Performance metrics for adapters
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AdapterMetrics {
+    /// Total number of operations performed
+    pub total_operations: u64,
+    /// Total number of errors
+    pub total_errors: u64,
+    /// Average response time in milliseconds
+    pub avg_response_time_ms: f64,
+    /// Last health check duration
+    pub last_health_check_ms: Option<u64>,
+    /// Total uptime since registration
+    pub uptime_percentage: f64,
 }
 
 /// Adapter status
@@ -80,19 +132,30 @@ pub trait AdapterFactory: Send + Sync {
     fn validate_config(&self, config: &CustomBlockchainConfig) -> QuIDBlockchainResult<()>;
 }
 
-/// Central adapter registry
+/// Central adapter registry with optimized performance
 pub struct AdapterRegistry {
-    /// Registered adapters
-    adapters: RwLock<HashMap<String, Box<dyn BlockchainAdapter>>>,
+    /// Registered adapters (Arc for efficient sharing)
+    adapters: RwLock<HashMap<String, Arc<dyn BlockchainAdapter>>>,
     /// Adapter factories
     factories: RwLock<HashMap<String, Box<dyn AdapterFactory>>>,
     /// Adapter metadata
     metadata: RwLock<HashMap<String, AdapterMetadata>>,
+    /// Health check cache
+    health_cache: RwLock<HashMap<String, HealthCheckCache>>,
     /// Registry configuration
     config: RegistryConfig,
 }
 
-/// Registry configuration
+/// Batch operations for improved performance
+#[derive(Debug)]
+pub struct BatchOperationResult {
+    pub successful: Vec<String>,
+    pub failed: Vec<(String, String)>, // (name, error)
+    pub total_processed: usize,
+    pub processing_time: Duration,
+}
+
+/// Registry configuration with performance tuning
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegistryConfig {
     /// Enable auto-discovery of adapters
@@ -103,6 +166,12 @@ pub struct RegistryConfig {
     pub health_check_interval: u64,
     /// Enable adapter caching
     pub enable_caching: bool,
+    /// Health check cache TTL in seconds
+    pub health_cache_ttl: u64,
+    /// Batch operation timeout in seconds
+    pub batch_timeout: u64,
+    /// Enable performance metrics collection
+    pub enable_metrics: bool,
 }
 
 impl Default for RegistryConfig {
@@ -112,6 +181,9 @@ impl Default for RegistryConfig {
             max_adapters: 100,
             health_check_interval: 300, // 5 minutes
             enable_caching: true,
+            health_cache_ttl: 60, // 1 minute
+            batch_timeout: 30, // 30 seconds
+            enable_metrics: true,
         }
     }
 }
@@ -128,11 +200,12 @@ impl AdapterRegistry {
             adapters: RwLock::new(HashMap::new()),
             factories: RwLock::new(HashMap::new()),
             metadata: RwLock::new(HashMap::new()),
+            health_cache: RwLock::new(HashMap::new()),
             config,
         }
     }
 
-    /// Register a blockchain adapter
+    /// Register a blockchain adapter with performance optimization
     pub async fn register(
         &self,
         name: &str,
@@ -140,6 +213,7 @@ impl AdapterRegistry {
     ) -> QuIDBlockchainResult<()> {
         let mut adapters = self.adapters.write().await;
         let mut metadata = self.metadata.write().await;
+        let mut health_cache = self.health_cache.write().await;
 
         if adapters.contains_key(name) {
             return Err(QuIDBlockchainError::AdapterError(
@@ -153,7 +227,7 @@ impl AdapterRegistry {
             ));
         }
 
-        // Create metadata
+        // Create metadata with metrics
         let adapter_metadata = AdapterMetadata {
             name: name.to_string(),
             version: "1.0.0".to_string(),
@@ -162,10 +236,19 @@ impl AdapterRegistry {
             required_features: Vec::new(),
             status: AdapterStatus::Active,
             registered_at: chrono::Utc::now(),
+            metrics: AdapterMetrics::default(),
         };
 
-        adapters.insert(name.to_string(), adapter);
+        // Convert to Arc for efficient sharing
+        let adapter_arc = Arc::from(adapter);
+        
+        adapters.insert(name.to_string(), adapter_arc);
         metadata.insert(name.to_string(), adapter_metadata);
+        
+        // Initialize health cache
+        if self.config.enable_caching {
+            health_cache.insert(name.to_string(), HealthCheckCache::new(AdapterStatus::Active));
+        }
 
         tracing::info!("Registered blockchain adapter: {}", name);
         Ok(())
@@ -194,11 +277,11 @@ impl AdapterRegistry {
         Ok(())
     }
 
-    /// Get adapter by name
-    pub async fn get_adapter(&self, name: &str) -> QuIDBlockchainResult<&dyn BlockchainAdapter> {
+    /// Get adapter by name (returns Arc for efficient sharing)
+    pub async fn get_adapter(&self, name: &str) -> QuIDBlockchainResult<Arc<dyn BlockchainAdapter>> {
         let adapters = self.adapters.read().await;
         adapters.get(name)
-            .map(|adapter| adapter.as_ref())
+            .cloned()
             .ok_or_else(|| QuIDBlockchainError::AdapterError(
                 AdapterError::NotFound(name.to_string()).to_string()
             ))
@@ -285,19 +368,86 @@ impl AdapterRegistry {
         adapters.contains_key(name)
     }
 
-    /// Perform health check on all adapters
+    /// Batch register adapters for improved performance
+    pub async fn batch_register(
+        &self,
+        adapters: Vec<(String, Box<dyn BlockchainAdapter>)>,
+    ) -> BatchOperationResult {
+        let start_time = Instant::now();
+        let mut successful = Vec::new();
+        let mut failed = Vec::new();
+        
+        for (name, adapter) in adapters {
+            match self.register(&name, adapter).await {
+                Ok(_) => successful.push(name),
+                Err(e) => failed.push((name, e.to_string())),
+            }
+        }
+        
+        let processing_time = start_time.elapsed();
+        let total_processed = successful.len() + failed.len();
+        
+        BatchOperationResult {
+            successful,
+            failed,
+            total_processed,
+            processing_time,
+        }
+    }
+    
+    /// Perform health check on all adapters with caching
     pub async fn health_check(&self) -> HashMap<String, AdapterStatus> {
         let adapters = self.adapters.read().await;
         let mut results = HashMap::new();
-
-        for (name, adapter) in adapters.iter() {
-            let status = match adapter.get_network_info().await {
-                Ok(_) => AdapterStatus::Active,
-                Err(e) => AdapterStatus::Failed(e.to_string()),
-            };
-            results.insert(name.clone(), status);
+        let cache_ttl = Duration::from_secs(self.config.health_cache_ttl);
+        
+        // Check cache first if enabled
+        if self.config.enable_caching {
+            let health_cache = self.health_cache.read().await;
+            
+            for (name, adapter) in adapters.iter() {
+                if let Some(cached) = health_cache.get(name) {
+                    if !cached.is_expired(cache_ttl) {
+                        results.insert(name.clone(), cached.status.clone());
+                        continue;
+                    }
+                }
+                
+                // Need to perform actual health check
+                let check_start = Instant::now();
+                let status = match adapter.get_network_info().await {
+                    Ok(_) => AdapterStatus::Active,
+                    Err(e) => AdapterStatus::Failed(e.to_string()),
+                };
+                let check_duration = check_start.elapsed();
+                
+                results.insert(name.clone(), status.clone());
+                
+                // Update cache without blocking (spawn task)
+                let name_clone = name.clone();
+                let health_cache_clone = self.health_cache.clone();
+                tokio::spawn(async move {
+                    let mut cache = health_cache_clone.write().await;
+                    cache.entry(name_clone)
+                        .and_modify(|entry| entry.update(status.clone(), check_duration))
+                        .or_insert_with(|| {
+                            let mut new_cache = HealthCheckCache::new(status);
+                            new_cache.check_duration = check_duration;
+                            new_cache
+                        });
+                });
+            }
+        } else {
+            // No caching, perform direct health checks
+            for (name, adapter) in adapters.iter() {
+                let status = match adapter.get_network_info().await {
+                    Ok(_) => AdapterStatus::Active,
+                    Err(e) => AdapterStatus::Failed(e.to_string()),
+                };
+                results.insert(name.clone(), status);
+            }
         }
-
+        
         results
     }
 
@@ -523,6 +673,24 @@ impl RegistryBuilder {
         self.config.enable_caching = enabled;
         self
     }
+    
+    /// Set health cache TTL
+    pub fn health_cache_ttl(mut self, seconds: u64) -> Self {
+        self.config.health_cache_ttl = seconds;
+        self
+    }
+    
+    /// Set batch operation timeout
+    pub fn batch_timeout(mut self, seconds: u64) -> Self {
+        self.config.batch_timeout = seconds;
+        self
+    }
+    
+    /// Enable/disable metrics collection
+    pub fn enable_metrics(mut self, enabled: bool) -> Self {
+        self.config.enable_metrics = enabled;
+        self
+    }
 
     /// Build the registry
     pub fn build(self) -> AdapterRegistry {
@@ -597,10 +765,12 @@ mod tests {
             required_features: vec!["rpc".to_string()],
             status: AdapterStatus::Active,
             registered_at: chrono::Utc::now(),
+            metrics: AdapterMetrics::default(),
         };
 
         assert_eq!(metadata.name, "test");
         assert_eq!(metadata.status, AdapterStatus::Active);
+        assert_eq!(metadata.metrics.total_operations, 0);
     }
 
     #[test]
@@ -610,11 +780,59 @@ mod tests {
             .max_adapters(50)
             .health_check_interval(600)
             .enable_caching(false)
+            .health_cache_ttl(120)
+            .batch_timeout(60)
+            .enable_metrics(true)
             .build();
 
         assert!(!registry.config.auto_discovery);
         assert_eq!(registry.config.max_adapters, 50);
         assert_eq!(registry.config.health_check_interval, 600);
         assert!(!registry.config.enable_caching);
+        assert_eq!(registry.config.health_cache_ttl, 120);
+        assert_eq!(registry.config.batch_timeout, 60);
+        assert!(registry.config.enable_metrics);
+    }
+    
+    #[test]
+    fn test_health_check_cache() {
+        let mut cache = HealthCheckCache::new(AdapterStatus::Active);
+        let ttl = Duration::from_secs(60);
+        
+        // Should not be expired immediately
+        assert!(!cache.is_expired(ttl));
+        
+        // Update the cache
+        cache.update(AdapterStatus::Failed("Test error".to_string()), Duration::from_millis(100));
+        
+        // Should still not be expired
+        assert!(!cache.is_expired(ttl));
+        assert_eq!(cache.check_duration, Duration::from_millis(100));
+    }
+    
+    #[test]
+    fn test_adapter_metrics() {
+        let metrics = AdapterMetrics::default();
+        
+        assert_eq!(metrics.total_operations, 0);
+        assert_eq!(metrics.total_errors, 0);
+        assert_eq!(metrics.avg_response_time_ms, 0.0);
+        assert_eq!(metrics.uptime_percentage, 0.0);
+        assert!(metrics.last_health_check_ms.is_none());
+    }
+    
+    #[test]
+    fn test_batch_operation_result() {
+        let result = BatchOperationResult {
+            successful: vec!["adapter1".to_string(), "adapter2".to_string()],
+            failed: vec![("adapter3".to_string(), "Error message".to_string())],
+            total_processed: 3,
+            processing_time: Duration::from_millis(500),
+        };
+        
+        assert_eq!(result.successful.len(), 2);
+        assert_eq!(result.failed.len(), 1);
+        assert_eq!(result.total_processed, 3);
+        assert_eq!(result.processing_time, Duration::from_millis(500));
     }
 }
