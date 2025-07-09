@@ -6,7 +6,11 @@ members = [
     "quid-desktop",
     "quid-ssh",
     "quid-tls",
-    "quid-wallet"
+    # "quid-blockchain",  # Temporarily disabled due to dependency conflicts
+    "quid-wallet",
+    "quid-exchange",
+    "quid-multisig",
+    "quid-nym-adapter"
 ]
 resolver = "2"
 
