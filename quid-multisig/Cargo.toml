@@ -1,0 +1,58 @@
+[package]
+name = "quid-multisig"
+version = "0.1.0"
+edition = "2021"
+description = "QuID multi-signature recovery system for enhanced security"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+# Inherit from workspace
+quid-core = { path = "../quid-core" }
+quid-wallet = { path = "../quid-wallet" }
+sha3 = { workspace = true }
+zeroize = { workspace = true }
+secrecy = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+hex = { workspace = true }
+rand = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+dirs = { workspace = true }
+
+# Cryptographic primitives
+sha2 = "0.10"
+hmac = "0.12"
+aes-gcm = "0.10"
+chacha20poly1305 = "0.10"
+
+# Secret sharing
+vsss-rs = "3.3"
+
+# Threshold signatures
+threshold-crypto = "0.4"
+
+# Async trait support
+async-trait = "0.1"
+
+# Configuration
+toml = "0.8"
+
+# Serialization
+bincode = "1.3"
+
+[dev-dependencies]
+proptest = { workspace = true }
+tempfile = "3.8"
+tokio-test = "0.4"
+
+[features]
+default = ["shamir-secret-sharing", "threshold-signatures"]
+shamir-secret-sharing = ["vsss-rs"]
+threshold-signatures = ["threshold-crypto"]
+secure-enclaves = []
+hardware-security = []
