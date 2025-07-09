@@ -11,7 +11,8 @@ members = [
     "quid-exchange",
     "quid-multisig",
     "quid-nym-adapter",
-    "quid-nostr"
+    "quid-nostr",
+    "quid-zkp"
 ]
 resolver = "2"
 
