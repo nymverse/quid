@@ -3,7 +3,7 @@ name = "quid-core"
 version = "0.1.0"
 edition = "2021"
 description = "Core quantum-resistant identity protocol implementation"
-license = "MIT OR Apache-2.0"
+license = "0BSD"
 
 [dependencies]
 # Inherit from workspace
@@ -15,6 +15,10 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 hex = { workspace = true }
 rand = { workspace = true }
+tokio = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+bincode = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }

@@ -11,15 +11,20 @@ pub mod identity;
 pub mod recovery;
 pub mod security;
 pub mod storage;
+pub mod network;
 
 pub use error::QuIDError;
 pub use identity::{QuIDIdentity, Extension};
 pub use recovery::{RecoveryCoordinator, RecoveryShare, GuardianInfo};
 pub use security::{SecureMemory, TimingResistance};
 pub use storage::{IdentityStorage, StorageConfig, EncryptedIdentity};
+pub use network::{NetworkPrivacyManager, NetworkPrivacyConfig, PrivacyLevel};
 
 /// Result type for QuID operations
 pub type Result<T> = std::result::Result<T, QuIDError>;
+
+/// QuID result type alias
+pub type QuIDResult<T> = std::result::Result<T, QuIDError>;
 
 /// Security levels corresponding to NIST categories
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
