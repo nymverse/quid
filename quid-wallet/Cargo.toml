@@ -1,0 +1,52 @@
+[package]
+name = "quid-wallet"
+version = "0.1.0"
+edition = "2021"
+description = "QuID wallet integration for hardware and software wallets"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+# Inherit from workspace
+quid-core = { path = "../quid-core" }
+# quid-blockchain = { path = "../quid-blockchain" }
+sha3 = { workspace = true }
+zeroize = { workspace = true }
+secrecy = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+hex = { workspace = true }
+rand = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+dirs = { workspace = true }
+
+# Hardware wallet support
+hidapi = { version = "2.4", optional = true }
+btleplug = { version = "0.11", optional = true }
+
+# USB/HID communication
+libusb1-sys = { version = "0.6", optional = true }
+
+# Serialization for wallet protocols
+protobuf = "3.4"
+cbor-data = "0.8"
+toml = "0.8"
+
+# Async trait support
+async-trait = "0.1"
+
+[dev-dependencies]
+proptest = { workspace = true }
+tempfile = "3.8"
+tokio-test = "0.4"
+
+[features]
+default = ["hardware-wallets", "software-wallets"]
+hardware-wallets = ["hidapi", "btleplug", "libusb1-sys"]
+software-wallets = []
+ledger = ["hardware-wallets"]
+trezor = ["hardware-wallets"]
